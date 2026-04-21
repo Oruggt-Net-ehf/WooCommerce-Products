@@ -457,14 +457,23 @@ def main():
     LogEntry("Fatal error: {}".format(returned_dict['fatal error']['error message']),0,True)
 
   # Replace these with your actual WooCommerce store details
-  BaseURL = returned_dict["Creds"]["hostname"]
-  consumer_key = returned_dict["Creds"]["username"]
-  consumer_secret = returned_dict["Creds"]["credential"]
+  strBaseURL = returned_dict["Creds"]["hostname"]
+  strWCKey = returned_dict["Creds"]["username"]
+  strWCSecret = returned_dict["Creds"]["credential"]
 
-  if not BaseURL or not consumer_key or not consumer_secret:
-      LogEntry("Please set the BASEURL, KEY, and SECRET environment variables.",0,True)
+  if not strBaseURL or not strWCKey or not strWCSecret:
+      LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
   sentry_sdk.capture_message("Hello Better Stack, this is a test message from Python!")
+  strAction = "/wp-json/wc/v3/products?per_page=5&page=17"
+  strURL = strBaseURL + strAction
+  dictHeader = {}
+  strMethod = "get"
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  print(dictResponse["Success"])
+
+
+
 
 if __name__ == '__main__':
   main()
