@@ -9,7 +9,7 @@ Following packages need to be installed
 pip install requests
 pip install sentry_sdk
 pip install argparse
-pip install onepassword
+pip install onepassword-sdk
 pip install asyncio
 
 '''
@@ -23,6 +23,7 @@ import argparse
 import configparser
 from onepassword import Client, DesktopAuth
 import asyncio
+import platform
 
 if sys.version_info[0] > 2:
     import urllib.parse as urlparse
@@ -188,6 +189,43 @@ def isInt(CheckValue):
     else:
         fTemp = "NULL"
     return fTemp != "NULL"
+
+def GetFileHandle(strFileName, strperm):
+    """
+    This wraps error handling around standard file open function
+    Parameters:
+      strFileName: Simple string with filename to be opened
+      strperm: single character string, usually w or r to indicate read vs write.
+      other options such as "a" and "x" are valid too.
+    Returns:
+      File Handle object
+    """
+    dictModes = {}
+    dictModes["w"] = "writing"
+    dictModes["r"] = "reading"
+    dictModes["a"] = "appending"
+    dictModes["x"] = "opening"
+    dictModes["wb"] = "binary write"
+
+    cMode = strperm[:2].lower().strip()
+
+    try:
+        if len(strperm) > 1:
+          objFileHndl = open(strFileName, strperm)
+        else:
+          objFileHndl = open(strFileName, strperm, encoding='utf8')
+        return objFileHndl
+    except PermissionError:
+        LogEntry("unable to open output file {} for {}, "
+              "permission denied.".format(strFileName, dictModes[cMode]))
+        return ("Permission denied")
+    except FileNotFoundError:
+        LogEntry("unable to open output file {} for {}, "
+              "Issue with the path".format(strFileName, dictModes[cMode]))
+        return ("FileNotFound")
+    except Exception as err:
+      LogEntry("Unknown error: {}".format(err))
+      return ("unknowErr")
 
 def FetchEnv(strVarName):
   """
@@ -357,33 +395,6 @@ def main():
 
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
-  strConfile = objArgs.config
-  if os.path.isfile(strConfile):
-    LogEntry ("Configuration File {} exists".formatstrConfile)
-  else:
-    LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
-    strConfile = strDefConf
-
-  objConfig = configparser.ConfigParser()
-  objConfig.read(strConfile)
-  if "Generic" in objConfig:
-    if "AccountName" in objConfig["Generic"]:
-      strAccountName = objConfig["Generic"]["AccountName"]
-    else:
-       LogEntry("Account name not found in config")
-  else:
-     LogEntry("section Generic not found in config")
-  if "WPCreds" in objConfig:
-    if "VaultID" in objConfig["WPCreds"]:
-      strVaultID = objConfig["WPCreds"]["VaultID"]
-    else:
-       LogEntry("VaultID not found in config")
-    if "ItemID" in objConfig["WPCreds"]:
-      strItemID = objConfig["WPCreds"]["ItemID"]
-    else:
-       LogEntry("ItemID not found in config")
-  else:
-     LogEntry("section WPCreds not found in config")
   
   ISO = time.strftime("-%Y-%m-%d")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
@@ -420,7 +431,7 @@ def main():
 
   strLogFile = strLogDir + strScriptName[:iLoc] + ISO + ".log"
   objLogOut = open(strLogFile, "a", 1)
-  strScriptHost = sys.platform.node().upper()
+  strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
 
   LogEntry("This is a script to parse WooCommerce product description for specifications "
@@ -440,6 +451,35 @@ def main():
     LogEntry("Proxy has been configured for {}".format(strProxy))
   else:
     LogEntry("No proxy has been configured")
+  strConfile = objArgs.config
+  if os.path.isfile(strConfile):
+    LogEntry ("Configuration File {} exists".format(strConfile))
+  else:
+    LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
+    strConfile = strDefConf
+  objConFileHndl = GetFileHandle(strConfile, "r")
+  objConfig = configparser.ConfigParser()
+  objConfig.read_file(objConFileHndl)
+  objConFileHndl.close()
+
+  if "Generic" in objConfig:
+    if "AccountName" in objConfig["Generic"]:
+      strAccountName = objConfig["Generic"]["AccountName"]
+    else:
+       LogEntry("Account name not found in config")
+  else:
+     LogEntry("section Generic not found in config")
+  if "WPCreds" in objConfig:
+    if "VaultID" in objConfig["WPCreds"]:
+      strVaultID = objConfig["WPCreds"]["VaultID"]
+    else:
+       LogEntry("VaultID not found in config")
+    if "ItemID" in objConfig["WPCreds"]:
+      strItemID = objConfig["WPCreds"]["ItemID"]
+    else:
+       LogEntry("ItemID not found in config")
+  else:
+     LogEntry("section WPCreds not found in config")
 
   strToken = FetchEnv("TOKEN")
   if not strToken:
@@ -450,13 +490,15 @@ def main():
   dictItemSpecs["item_id"] = strItemID
   dictItemCollection["Creds"] = dictItemSpecs
 
+  LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
+     strAccountName, "provided" if strToken else "not provided"))
+
   returned_dict = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=strToken))
   if returned_dict is None:
     LogEntry("Failed to retrieve item.",0,True)
   if "fatal error" in returned_dict:
-    LogEntry("Fatal error: {}".format(returned_dict['fatal error']['error message']),0,True)
+    LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
 
-  # Replace these with your actual WooCommerce store details
   strBaseURL = returned_dict["Creds"]["hostname"]
   strWCKey = returned_dict["Creds"]["username"]
   strWCSecret = returned_dict["Creds"]["credential"]
@@ -470,7 +512,7 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  print(dictResponse["Success"])
+  print(dictResponse.keys())
 
 
 
