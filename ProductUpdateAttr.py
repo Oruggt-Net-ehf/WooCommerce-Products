@@ -1,12 +1,16 @@
 '''
-Script that takes pictures using picamera2
-then posts them to Prusa connect
+Script that analyzes product description in WooCommerce 
+and turns a spec list into attributes
 
-Author Siggi Bjarnason 07 may 2024
-Copyright 2024 Siggi Bjarnason
+Author Siggi Bjarnason 21 April 2026
+Copyright 2026 Siggi Bjarnason
 
 Following packages need to be installed
 pip install requests
+pip install sentry_sdk
+pip install argparse
+pip install onepassword
+pip install asyncio
 
 '''
 # Import libraries
@@ -16,6 +20,9 @@ import sys
 import requests
 import sentry_sdk
 import argparse
+import configparser
+from onepassword import Client, DesktopAuth
+import asyncio
 
 if sys.version_info[0] > 2:
     import urllib.parse as urlparse
@@ -33,9 +40,7 @@ iTotalSleep = 0
 iLogLevel = 4  # How much logging should be done. Level 10 is debug level, 0 is none
 iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 2  # Minimum time in seconds between API calls
-strURL = "https://connect.prusa3d.com/c/snapshot"
-strHBURL = "https://uptime.betterstack.com/api/v1/heartbeat/JwJAH7MrRGy1VxkKs15GAJjX"
-strSentryURL = "https://ZyeMfvXx4kDhZsFuKf5Qwcg5@s2379987.eu-fsn-3.betterstackdata.com/1"
+strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
 
 sentry_sdk.init(
     dsn=strSentryURL,
@@ -45,6 +50,80 @@ sentry_sdk.init(
 )
 
 # sub defs
+
+async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
+    """
+    Handles fetching items from 1Password based on the provided collection of item specifications. 
+    It supports both token-based authentication and desktop app authentication.
+    Parameters:
+    dictItemCollection: A dictionary of dictionaries, containing the specifications for the items to fetch.
+                        Inner dictionaries should have the keys "vault_id" and "item_id" to specify 
+                        the vault and item to fetch. The outer dictionary's keys are used as identifiers 
+                        for the fetched items in the returned dictionary.
+    strAccountName: The name of the 1Password account to use for authentication 
+                    in case of desktop app authentication.
+    strToken: The token to use for token-based authentication.
+    Returns: A dictionary of dictionaries containing the fetched items or an error message in case of failure. 
+                The structure of the returned dictionary is as follows:
+                {
+                    "item_identifier": {
+                        "urls": [list of URLs associated with the item],
+                        "tags": [list of tags associated with the item],
+                        "notes": notes associated with the item,
+                        "totp": TOTP field value if present,
+                        "field_title_1": field_value_1,
+                        "field_title_2": field_value_2,
+                        ...
+                    },
+                    ...
+    """
+        
+    strScriptName = os.path.basename(sys.argv[0])
+    strVersion = "{0}.{1}.{2}".format(sys.version_info[0],sys.version_info[1],sys.version_info[2])
+    try:
+        if strToken is not None:
+            LogEntry("Using token-based authentication. Make sure the token is valid and has the necessary permissions.",2)
+            objClient = await Client.authenticate(auth=strToken,
+            integration_name=strScriptName,
+            integration_version=strVersion,)
+        else:
+            # Connects to the 1Password desktop app.
+            LogEntry("No token provided. Using DesktopAuth for authentication. "
+                     "Make sure the 1Password desktop app is running and you are signed in.",2)
+            if strAccountName is None:
+                return {"fatal error": 
+                        {"error message":"neither token nor 1Password account name provided. Unable to authenticate."}}
+            objClient = await Client.authenticate(
+                auth=DesktopAuth(account_name=strAccountName),
+            integration_name=strScriptName,
+            integration_version=strVersion,)
+    except Exception as e:
+        return {"fatal error": {"error message": f"Authentication failed. {e}"}}
+
+    LogEntry("Connected to 1Password",1)
+
+    dictCollection = {}
+    for key, item_spec in dictItemCollection.items():
+        strVaultID = item_spec["vault_id"]
+        strItemID = item_spec["item_id"]
+        try:
+            objItem = await objClient.items.get(strVaultID, strItemID)
+        except Exception as e:
+            return {"fatal error": {"error message": f"Failed to retrieve item {strItemID} from vault {strVaultID}. {e}"}}
+        dictItem = {}
+
+        if hasattr(objItem, 'websites') and objItem.websites:
+            dictItem["urls"] = [website.url for website in objItem.websites]
+        dictItem["tags"] = objItem.tags
+        dictItem["notes"] = objItem.notes
+        for objItemField in objItem.fields:
+            if objItemField.field_type == "Totp":
+                dictItem["totp"] = objItemField
+            else:
+                dictItem[objItemField.title] = objItemField.value
+        dictCollection[key] = dictItem
+
+    return dictCollection
 
 def CleanExit(strCause,bLog=True):
   """
@@ -62,7 +141,7 @@ def CleanExit(strCause,bLog=True):
         strScriptName, strScriptHost, strCause), 0)
 
   objLogOut.close()
-  #print("objLogOut closed")
+  print("objLogOut closed")
 
   sentry_sdk.capture_exception(Exception(strCause))
   sys.exit(9)
@@ -169,9 +248,11 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   LogEntry("Doing a {} to URL: {}".format(strMethod, strURL), 1)
   try:
     if strMethod.lower() == "head":
-      WebRequest = requests.request("HEAD", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, headers=dictHeader)
+      WebRequest = requests.request("HEAD", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, 
+                                    headers=dictHeader)
     if strMethod.lower() == "put":
-      WebRequest = requests.request("PUT", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, headers=dictHeader, data=objData)
+      WebRequest = requests.request("PUT", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, 
+                                    headers=dictHeader, data=objData)
 
     if strMethod.lower() == "get":
       if strUser != "":
@@ -229,7 +310,7 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   iStatusCode = int(WebRequest.status_code)
 
   if not 200 <= iStatusCode <= 299:
-    #print("call resulted in status code {}".format(WebRequest.status_code))
+    LogEntry("call resulted in status code {}".format(WebRequest.status_code),3)
     strErrCode += str(iStatusCode)
     strErrText += WebRequest.text
     LogEntry("HTTP Error: {}".format(iStatusCode), 3)
@@ -262,28 +343,48 @@ def main():
   global objLogOut
   global iVerbose
   global dictProxies
-  global objFile
   global strScriptName
+  global strScriptHost
 
-  objFile = None
-
-  objParser = argparse.ArgumentParser(description="Raspberry Pi Monitor")
+  iLoc = sys.argv[0].rfind(".")
+  strDefConf = sys.argv[0][:iLoc] + ".ini"
+  objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator")
   objParser.add_argument("--silent", dest="silent",
                       action="store_true", help="only output to file, not to screen")
-  objParser.add_argument("--sleep", dest="sleep_time", type=int,
-                      help="Number of seconds to sleep inbetween checks, default is 60")
-  objParser.add_argument("--filename", dest="file_name", type=str, help="Output file name, "
-                         "defaults to {scriptname}-iso-date.csv in the script directory")
+  objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
 
   objArgs = objParser.parse_args()
-  if objArgs.sleep_time is not None:
-    iSleepSec = objArgs.sleep_time
-  else:
-     iSleepSec = 60
   iVerbose = objArgs.verbosity
+  strConfile = objArgs.config
+  if os.path.isfile(strConfile):
+    LogEntry ("Configuration File {} exists".formatstrConfile)
+  else:
+    LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
+    strConfile = strDefConf
 
+  objConfig = configparser.ConfigParser()
+  objConfig.read(strConfile)
+  if "Generic" in objConfig:
+    if "AccountName" in objConfig["Generic"]:
+      strAccountName = objConfig["Generic"]["AccountName"]
+    else:
+       LogEntry("Account name not found in config")
+  else:
+     LogEntry("section Generic not found in config")
+  if "WPCreds" in objConfig:
+    if "VaultID" in objConfig["WPCreds"]:
+      strVaultID = objConfig["WPCreds"]["VaultID"]
+    else:
+       LogEntry("VaultID not found in config")
+    if "ItemID" in objConfig["WPCreds"]:
+      strItemID = objConfig["WPCreds"]["ItemID"]
+    else:
+       LogEntry("ItemID not found in config")
+  else:
+     LogEntry("section WPCreds not found in config")
+  
   ISO = time.strftime("-%Y-%m-%d")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
   strRealPath = os.path.realpath(sys.argv[0])
@@ -321,3 +422,49 @@ def main():
   objLogOut = open(strLogFile, "a", 1)
   strScriptHost = sys.platform.node().upper()
   bQuiet = objArgs.silent
+
+  LogEntry("This is a script to parse WooCommerce product description for specifications "
+           "and create product attributes from it."
+          "This is running under Python Version {}".format(strVersion))
+  LogEntry("Running from: {}".format(strRealPath))
+  dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
+  LogEntry("The script started at {}".format(dtNow))
+
+  if FetchEnv("PROXY") is not None:
+    strProxy = os.getenv("PROXY")
+  if objArgs.proxy is not None:
+    strProxy = objArgs.proxy
+  if strProxy is not None:
+    dictProxies["http"] = strProxy
+    dictProxies["https"] = strProxy
+    LogEntry("Proxy has been configured for {}".format(strProxy))
+  else:
+    LogEntry("No proxy has been configured")
+
+  strToken = FetchEnv("TOKEN")
+  if not strToken:
+    strToken = None
+  dictItemCollection = {}
+  dictItemSpecs = {}
+  dictItemSpecs["vault_id"] = strVaultID
+  dictItemSpecs["item_id"] = strItemID
+  dictItemCollection["Creds"] = dictItemSpecs
+
+  returned_dict = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=strToken))
+  if returned_dict is None:
+    LogEntry("Failed to retrieve item.",0,True)
+  if "fatal error" in returned_dict:
+    LogEntry("Fatal error: {}".format(returned_dict['fatal error']['error message']),0,True)
+
+  # Replace these with your actual WooCommerce store details
+  BaseURL = returned_dict["Creds"]["hostname"]
+  consumer_key = returned_dict["Creds"]["username"]
+  consumer_secret = returned_dict["Creds"]["credential"]
+
+  if not BaseURL or not consumer_key or not consumer_secret:
+      LogEntry("Please set the BASEURL, KEY, and SECRET environment variables.",0,True)
+
+  sentry_sdk.capture_message("Hello Better Stack, this is a test message from Python!")
+
+if __name__ == '__main__':
+  main()
