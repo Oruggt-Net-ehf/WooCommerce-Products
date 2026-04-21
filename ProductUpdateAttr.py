@@ -384,6 +384,8 @@ def main():
   global strScriptName
   global strScriptHost
 
+  dictProxies = {}
+
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator")
@@ -512,7 +514,10 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  print(dictResponse.keys())
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]))
+  else:
+    LogEntry("API call to WooCommerce succeeded.")
 
 
 
