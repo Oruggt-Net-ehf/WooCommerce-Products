@@ -468,20 +468,26 @@ def main():
     if "AccountName" in objConfig["Generic"]:
       strAccountName = objConfig["Generic"]["AccountName"]
     else:
-       LogEntry("Account name not found in config")
+      LogEntry("Account name not found in config")
+    if "PerPage" in objConfig["Generic"]:
+      if isInt(objConfig["Generic"]["PerPage"]):
+        iPerPage = int(objConfig["Generic"]["PerPage"])
+      else:
+        LogEntry("PerPage value in config is not an integer, defaulting to 25")
+        iPerPage = 25
   else:
-     LogEntry("section Generic not found in config")
+    LogEntry("section Generic not found in config")
   if "WPCreds" in objConfig:
     if "VaultID" in objConfig["WPCreds"]:
       strVaultID = objConfig["WPCreds"]["VaultID"]
     else:
-       LogEntry("VaultID not found in config")
+      LogEntry("VaultID not found in config")
     if "ItemID" in objConfig["WPCreds"]:
       strItemID = objConfig["WPCreds"]["ItemID"]
     else:
-       LogEntry("ItemID not found in config")
+      LogEntry("ItemID not found in config")
   else:
-     LogEntry("section WPCreds not found in config")
+    LogEntry("section WPCreds not found in config")
 
   strToken = FetchEnv("TOKEN")
   if not strToken:
@@ -508,18 +514,29 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
-  sentry_sdk.capture_message("Hello Better Stack, this is a test message from Python!")
-  strAction = "/wp-json/wc/v3/products?per_page=5&page=17"
-  strURL = strBaseURL + strAction
+  iPage = 1
+  iProdCount = 5
+  iTotalProducts = 0
+  strAction = "/wp-json/wc/v3/products"
   dictHeader = {}
   strMethod = "get"
-  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-
-  dictProducts = dictResponse[1]
-  for dictProduct in dictProducts:
-    LogEntry("Product {} is called: {}".format(dictProduct["id"], dictProduct["name"]))
+  while iProdCount > 0:
+    LogEntry("Fetching page {} of products".format(iPage))
+    dictParams = {}
+    dictParams["per_page"] = iPerPage
+    dictParams["page"] = iPage
+    strParams = urlparse.urlencode(dictParams)
+    strURL = strBaseURL + strAction + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+    dictProducts = dictResponse[1]
+    iProdCount = len(dictProducts)
+    iTotalProducts += iProdCount
+    LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts))
+    iPage += 1
+    for dictProduct in dictProducts:
+      print("Product {} is called: {}".format(dictProduct["id"], dictProduct["name"]))
 
 
 
