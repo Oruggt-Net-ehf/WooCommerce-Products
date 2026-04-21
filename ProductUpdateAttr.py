@@ -194,8 +194,8 @@ def isInt(CheckValue):
 
 def GetSpecificationsFollower(strHTML):
     """
-    Parses an HTML string, finds the heading "specifications" and determines
-    what element immediately follows it.
+    Parses an HTML string, finds the heading "Technical Specification" or "Specifications"
+    and determines what element immediately follows it.
     Parameters:
       strHTML: A string containing HTML content
     Returns:
@@ -209,8 +209,9 @@ def GetSpecificationsFollower(strHTML):
 
         # Find all heading tags (h1-h6)
         for heading_tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            # Check if the heading text contains "specifications" (case-insensitive)
-            if heading_tag.get_text().strip().lower() == 'specifications':
+            # Check if the heading text is "specifications" or "technical specification" (case-insensitive)
+            heading_text = heading_tag.get_text().strip().lower()
+            if heading_text == 'specifications' or heading_text == 'technical specification':
                 # Get the next sibling element that is a tag (skip text nodes)
                 next_element = heading_tag.find_next_sibling()
 
@@ -219,7 +220,7 @@ def GetSpecificationsFollower(strHTML):
                     next_element = next_element.find_next_sibling() if hasattr(next_element, 'find_next_sibling') else None
 
                 if next_element is None:
-                    return "neither"
+                    return "none"
 
                 # Check the tag name of the next element
                 tag_name = next_element.name.lower() if next_element.name else "neither"
