@@ -1,5 +1,5 @@
 '''
-Script that analyzes product description in WooCommerce 
+Script that analyzes product description in WooCommerce
 and turns a spec list into attributes
 
 Author Siggi Bjarnason 21 April 2026
@@ -54,17 +54,17 @@ sentry_sdk.init(
 
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
     """
-    Handles fetching items from 1Password based on the provided collection of item specifications. 
+    Handles fetching items from 1Password based on the provided collection of item specifications.
     It supports both token-based authentication and desktop app authentication.
     Parameters:
     dictItemCollection: A dictionary of dictionaries, containing the specifications for the items to fetch.
-                        Inner dictionaries should have the keys "vault_id" and "item_id" to specify 
-                        the vault and item to fetch. The outer dictionary's keys are used as identifiers 
+                        Inner dictionaries should have the keys "vault_id" and "item_id" to specify
+                        the vault and item to fetch. The outer dictionary's keys are used as identifiers
                         for the fetched items in the returned dictionary.
-    strAccountName: The name of the 1Password account to use for authentication 
+    strAccountName: The name of the 1Password account to use for authentication
                     in case of desktop app authentication.
     strToken: The token to use for token-based authentication.
-    Returns: A dictionary of dictionaries containing the fetched items or an error message in case of failure. 
+    Returns: A dictionary of dictionaries containing the fetched items or an error message in case of failure.
                 The structure of the returned dictionary is as follows:
                 {
                     "item_identifier": {
@@ -78,7 +78,7 @@ async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=No
                     },
                     ...
     """
-        
+
     strScriptName = os.path.basename(sys.argv[0])
     strVersion = "{0}.{1}.{2}".format(sys.version_info[0],sys.version_info[1],sys.version_info[2])
     try:
@@ -92,7 +92,7 @@ async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=No
             LogEntry("No token provided. Using DesktopAuth for authentication. "
                      "Make sure the 1Password desktop app is running and you are signed in.",2)
             if strAccountName is None:
-                return {"fatal error": 
+                return {"fatal error":
                         {"error message":"neither token nor 1Password account name provided. Unable to authenticate."}}
             objClient = await Client.authenticate(
                 auth=DesktopAuth(account_name=strAccountName),
@@ -286,10 +286,10 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   LogEntry("Doing a {} to URL: {}".format(strMethod, strURL), 1)
   try:
     if strMethod.lower() == "head":
-      WebRequest = requests.request("HEAD", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, 
+      WebRequest = requests.request("HEAD", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies,
                                     headers=dictHeader)
     if strMethod.lower() == "put":
-      WebRequest = requests.request("PUT", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies, 
+      WebRequest = requests.request("PUT", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies,
                                     headers=dictHeader, data=objData)
 
     if strMethod.lower() == "get":
@@ -397,7 +397,7 @@ def main():
 
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
-  
+
   ISO = time.strftime("-%Y-%m-%d")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
   strRealPath = os.path.realpath(sys.argv[0])
@@ -407,16 +407,6 @@ def main():
     strBaseDir = strRealPath[:iLoc]
   if strBaseDir[-1:] != "/":
     strBaseDir += "/"
-
-  strOutDir  = strBaseDir + "Out/"
-  if strOutDir[-1:] != "/":
-    strOutDir += "/"
-
-  iLoc = sys.argv[0].rfind(".")
-
-  if not os.path.exists (strOutDir) :
-    os.makedirs(strOutDir)
-    print("\nPath '{0}' for output files didn't exists, so I create it!\n".format(strOutDir))
 
   strLogDir  = strBaseDir + "Logs/"
   if strLogDir[-1:] != "/":
@@ -469,6 +459,10 @@ def main():
       strAccountName = objConfig["Generic"]["AccountName"]
     else:
       LogEntry("Account name not found in config")
+    if "Filter" in objConfig["Generic"]:
+      strFilter = objConfig["Generic"]["Filter"]
+    else:
+      strFilter = None
     if "PerPage" in objConfig["Generic"]:
       if isInt(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
@@ -520,10 +514,17 @@ def main():
   strAction = "/wp-json/wc/v3/products"
   dictHeader = {}
   strMethod = "get"
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  if strFilter is not None:
+     lstFilter = strFilter.split(":")
+     if len(lstFilter) == 2:
+        strFilterKey = lstFilter[0]
+        strFilterValue = lstFilter[1]
+        LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
+        dictParams[strFilterKey] = strFilterValue
   while iProdCount > 0:
     LogEntry("Fetching page {} of products".format(iPage))
-    dictParams = {}
-    dictParams["per_page"] = iPerPage
     dictParams["page"] = iPage
     strParams = urlparse.urlencode(dictParams)
     strURL = strBaseURL + strAction + "?" + strParams
