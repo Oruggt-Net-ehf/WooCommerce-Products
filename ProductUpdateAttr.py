@@ -517,12 +517,12 @@ def main():
   dictParams = {}
   dictParams["per_page"] = iPerPage
   if strFilter is not None:
-     lstFilter = strFilter.split(":")
-     if len(lstFilter) == 2:
-        strFilterKey = lstFilter[0]
-        strFilterValue = lstFilter[1]
-        LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
-        dictParams[strFilterKey] = strFilterValue
+     lstFilters = strFilter.split("&")
+     for lstFilter in lstFilters:
+        if ":" in lstFilter:
+           strFilterKey, strFilterValue = lstFilter.split(":", 1)
+           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
+           dictParams[strFilterKey] = strFilterValue
   while iProdCount > 0:
     LogEntry("Fetching page {} of products".format(iPage))
     dictParams["page"] = iPage
