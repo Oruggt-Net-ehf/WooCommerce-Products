@@ -195,7 +195,7 @@ def isInt(CheckValue):
 def GetSpecificationsFollower(strHTML):
     """
     Parses an HTML string, finds the heading "Technical Specification" or "Specifications"
-    and determines what element immediately follows it.
+    and determines what element immediately follows it, ignoring any div elements.
     Parameters:
       strHTML: A string containing HTML content
     Returns:
@@ -212,12 +212,22 @@ def GetSpecificationsFollower(strHTML):
             # Check if the heading text is "specifications" or "technical specification" (case-insensitive)
             heading_text = heading_tag.get_text().strip().lower()
             if heading_text == 'specifications' or heading_text == 'technical specification':
-                # Get the next sibling element that is a tag (skip text nodes)
+                # Get the next sibling element that is a tag (skip text nodes and div elements)
                 next_element = heading_tag.find_next_sibling()
 
-                # Skip any text nodes or whitespace
-                while next_element and isinstance(next_element, str) and not next_element.strip():
-                    next_element = next_element.find_next_sibling() if hasattr(next_element, 'find_next_sibling') else None
+                # Skip any text nodes, whitespace, and div elements
+                while next_element:
+                    if isinstance(next_element, str):
+                        # Skip text nodes
+                        if not next_element.strip():
+                            next_element = next_element.find_next_sibling() if hasattr(next_element, 'find_next_sibling') else None
+                        else:
+                            break
+                    elif hasattr(next_element, 'name') and next_element.name and next_element.name.lower() == 'div':
+                        # Skip div elements
+                        next_element = next_element.find_next_sibling()
+                    else:
+                        break
 
                 if next_element is None:
                     return "none"
