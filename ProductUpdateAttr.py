@@ -11,6 +11,7 @@ pip install sentry_sdk
 pip install argparse
 pip install onepassword-sdk
 pip install asyncio
+pip install beautifulsoup4
 
 '''
 # Import libraries
@@ -29,6 +30,7 @@ if sys.version_info[0] > 2:
     import urllib.parse as urlparse
     # The following line surpresses a warning that we aren't validating the HTTPS certificate
     requests.urllib3.disable_warnings()
+    from bs4 import BeautifulSoup
 else:
    print("This script is only supported on python 3")
    sys.exit(9)
@@ -189,6 +191,52 @@ def isInt(CheckValue):
     else:
         fTemp = "NULL"
     return fTemp != "NULL"
+
+def GetSpecificationsFollower(strHTML):
+    """
+    Parses an HTML string, finds the heading "specifications" and determines
+    what element immediately follows it.
+    Parameters:
+      strHTML: A string containing HTML content
+    Returns:
+      A string indicating what follows the specifications heading:
+        - "table" if a <table> element follows
+        - "ul" if an unordered list <ul> element follows
+        - "neither" if neither a table nor ul follows
+    """
+    try:
+        soup = BeautifulSoup(strHTML, 'html.parser')
+
+        # Find all heading tags (h1-h6)
+        for heading_tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+            # Check if the heading text contains "specifications" (case-insensitive)
+            if heading_tag.get_text().strip().lower() == 'specifications':
+                # Get the next sibling element that is a tag (skip text nodes)
+                next_element = heading_tag.find_next_sibling()
+
+                # Skip any text nodes or whitespace
+                while next_element and isinstance(next_element, str) and not next_element.strip():
+                    next_element = next_element.find_next_sibling() if hasattr(next_element, 'find_next_sibling') else None
+
+                if next_element is None:
+                    return "neither"
+
+                # Check the tag name of the next element
+                tag_name = next_element.name.lower() if next_element.name else "neither"
+
+                if tag_name == "table":
+                    return "table"
+                elif tag_name == "ul":
+                    return "ul"
+                else:
+                    return "neither"
+
+        # If specifications heading not found
+        return "not found"
+
+    except Exception as e:
+        LogEntry(f"Error parsing HTML in GetSpecificationsFollower: {e}", 3)
+        return "error"
 
 def GetFileHandle(strFileName, strperm):
     """
@@ -407,10 +455,12 @@ def main():
     strBaseDir = strRealPath[:iLoc]
   if strBaseDir[-1:] != "/":
     strBaseDir += "/"
+  print("Base dir is {}".format(strBaseDir))
 
   strLogDir  = strBaseDir + "Logs/"
   if strLogDir[-1:] != "/":
     strLogDir += "/"
+  print("Log dir is {}".format(strLogDir))
 
   iLoc = sys.argv[0].rfind(".")
 
@@ -537,8 +587,10 @@ def main():
     LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts))
     iPage += 1
     for dictProduct in dictProducts:
-      print("Product {} is called: {}".format(dictProduct["id"], dictProduct["name"]))
+      strSpecType = GetSpecificationsFollower(dictProduct["description"])
+      print("Product {} is called: {} and has specifications of type: {}".format(dictProduct["id"], dictProduct["name"], strSpecType))
 
+  LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
 
 
 
