@@ -515,9 +515,11 @@ def main():
   strMethod = "get"
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]))
-  else:
-    LogEntry("API call to WooCommerce succeeded.")
+    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+
+  dictProducts = dictResponse[1]
+  for dictProduct in dictProducts:
+    LogEntry("Product {} is called: {}".format(dictProduct["id"], dictProduct["name"]))
 
 
 
