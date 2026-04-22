@@ -569,6 +569,8 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
+  objFileOut = GetFileHandle("c:/temp/ProdList.csv", "w")
+  objFileOut.write("ProductID,Brand,SKU,Name,SpecType\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -599,8 +601,12 @@ def main():
     iPage += 1
     for dictProduct in dictProducts:
       strSpecType = GetSpecificationsFollower(dictProduct["description"])
-      print("Product {} is called: {} and has specifications of type: {}".format(dictProduct["id"], dictProduct["name"], strSpecType))
+      print("Product {} has the sku {} is called: {} and has specifications of type: {}".format(dictProduct["id"], dictProduct["sku"], dictProduct["name"], strSpecType))
+      strBrands = "{}".format(dictProduct["brands"])
+      objFileOut.write("{},{},{},{},{}\n".format(dictProduct["id"], strBrands.replace(',', ' '), dictProduct["sku"], dictProduct["name"].replace(","," "), strSpecType))
+      objFileOut.flush()
 
+  objFileOut.close()
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
 
 
