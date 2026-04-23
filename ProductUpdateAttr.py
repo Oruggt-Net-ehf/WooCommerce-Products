@@ -457,15 +457,20 @@ def main():
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
 
+  print("sysargv is {}".format(sys.argv[0]))
   ISO = time.strftime("-%Y-%m-%d")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
-  strRealPath = os.path.realpath(sys.argv[0])
+  strRealPath = os.path.realpath(sys.argv[0]).replace("\\", "/")
+  print("Real path is {}".format(strRealPath))
+
   strBaseDir = os.path.dirname(sys.argv[0])
+  print("Base dir is *{}*".format(strBaseDir))
   if strBaseDir == "":
     iLoc = strRealPath.rfind("/")
     strBaseDir = strRealPath[:iLoc]
   if strBaseDir[-1:] != "/":
     strBaseDir += "/"
+  print("real path is {}".format(strRealPath))
   print("Base dir is {}".format(strBaseDir))
 
   strLogDir  = strBaseDir + "Logs/"
