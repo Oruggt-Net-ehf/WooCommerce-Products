@@ -609,6 +609,27 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
+  dictHeader = {}
+  strMethod = "get"
+  strAction = "/wp-json/wc/v3/products/attributes"
+  dictGlobalAttributes = {}
+  strURL = strBaseURL + strAction
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+  LogEntry("API call successful, processing response. {} total attributes in response, {} total pages".format(strTotal, strTotalPages),0)
+  dictAttrCollection = dictResponse[1]
+  if len(dictAttrCollection) != strTotal:
+    LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), strTotal))
+
+  objAttrOut = GetFileHandle("c:/temp/GlobalAttr.csv", "w")
+  objAttrOut.write("ID,Name,slug,type,has_archives\n")
+
+  for dictAttr in dictAttrCollection:
+    dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
+    objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"], dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
+  objAttrOut.close()
+
   objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
   objFileOut.write("|Attribute|value|\n|----|----|\n")
   iPage = 1
@@ -654,7 +675,7 @@ def main():
          if len(dictBrands) > 0:
             strBrand = dictBrands[0]["name"]
       if len(dictAttributes) > 0:
-        objFileOut.write("|**{} {}**\r {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
+        objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
       for key, value in dictAttributes.items():
         objFileOut.write("|{}|{}|\n".format(key, value))
         if key not in lstAttribs:
