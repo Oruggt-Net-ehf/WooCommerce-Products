@@ -618,6 +618,7 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictParams = {}
+  lstAttribs = []
   dictParams["per_page"] = iPerPage
   if strFilter is not None:
      lstFilters = strFilter.split("&")
@@ -647,18 +648,23 @@ def main():
                                                              dictProduct["sku"], dictProduct["name"], len(dictProduct["attributes"])))
       print("Has the following attributes in the description: {}".format(dictAttributes))
       #strBrands = "{}".format(dictProduct["brands"])
-      strBrand = ""
+      strBrand = "No Brand"
       dictBrands = dictProduct["brands"]
       if isinstance(dictBrands, list):
          if len(dictBrands) > 0:
             strBrand = dictBrands[0]["name"]
       if len(dictAttributes) > 0:
-        objFileOut.write("|**{} {}**\n {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
+        objFileOut.write("|**{} {}**\r {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
       for key, value in dictAttributes.items():
         objFileOut.write("|{}|{}|\n".format(key, value))
+        if key not in lstAttribs:
+          lstAttribs.append(key)
       objFileOut.flush()
 
   objFileOut.close()
+  for strAttrib in lstAttribs:
+    print("Found attribute: {}".format(strAttrib))
+
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
 
 
