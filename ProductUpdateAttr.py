@@ -74,15 +74,6 @@ def ExtractTwoColumnTables(strHTML):
         # Get all rows
         objRows = objTable.find_all('tr')
 
-        # Check if this is a two-column table
-        if not objRows:
-            continue
-
-        # Get the number of columns from the first row
-        objFirstRow = objRows[0].find_all(['td', 'th'])
-        if len(objFirstRow) != 2:
-            continue
-
         # Extract data from all objRows
         for objRow in objRows:
             objCells = objRow.find_all(['td'])
@@ -364,6 +355,8 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   global iTotalSleep
   global iStatusCode
   global strScriptHost
+  global strTotal
+  global strTotalPages
 
   fTemp = time.time()
   fDelta = fTemp - tLastCall
@@ -445,6 +438,8 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   LogEntry("call resulted in status code {}".format(
     WebRequest.status_code), 3)
   iStatusCode = int(WebRequest.status_code)
+  strTotal = WebRequest.headers.get("X-WP-Total", "not present")
+  strTotalPages = WebRequest.headers.get("X-WP-TotalPages", "not present")
 
   if not 200 <= iStatusCode <= 299:
     LogEntry("call resulted in status code {}".format(WebRequest.status_code),3)
@@ -614,8 +609,8 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
-  objFileOut = GetFileHandle("c:/temp/Prodattr.csv", "w")
-  objFileOut.write("Attribute,value\n")
+  objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
+  objFileOut.write("|Attribute|value|\n|----|----|\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -639,6 +634,7 @@ def main():
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+    LogEntry("API call successful, processing response. {} total products in response, {} total pages".format(strTotal, strTotalPages),0)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
     iTotalProducts += iProdCount
@@ -656,9 +652,10 @@ def main():
       if isinstance(dictBrands, list):
          if len(dictBrands) > 0:
             strBrand = dictBrands[0]["name"]
-      objFileOut.write("*{} {} {}*,{} existing\n".format(strBrand, dictProduct["sku"], dictProduct["name"].replace(","," "), len(dictProduct["attributes"])))
+      if len(dictAttributes) > 0:
+        objFileOut.write("|**{} {}**\n {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
       for key, value in dictAttributes.items():
-        objFileOut.write("{},{}\n".format(key, value))
+        objFileOut.write("|{}|{}|\n".format(key, value))
       objFileOut.flush()
 
   objFileOut.close()
