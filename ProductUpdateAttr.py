@@ -25,6 +25,7 @@ import configparser
 from onepassword import Client, DesktopAuth
 import asyncio
 import platform
+from bs4 import BeautifulSoup
 
 if sys.version_info[0] > 2:
     import urllib.parse as urlparse
@@ -53,6 +54,45 @@ sentry_sdk.init(
 )
 
 # sub defs
+
+def ExtractTwoColumnTables(strHTML):
+    """
+    Extract all two-column tables from HTML and return as a dictionary.
+    Parameters:
+        strHTML (str): The HTML content as a string
+    Returns:
+        dict: Dictionary where keys are values from the first column
+              and values are from the second column
+    """
+    objSoup = BeautifulSoup(strHTML, 'html.parser')
+    dictReturn = {}
+
+    # Find all tables
+    objTables = objSoup.find_all('table')
+
+    for objTable in objTables:
+        # Get all rows
+        objRows = objTable.find_all('tr')
+
+        # Check if this is a two-column table
+        if not objRows:
+            continue
+
+        # Get the number of columns from the first row
+        objFirstRow = objRows[0].find_all(['td', 'th'])
+        if len(objFirstRow) != 2:
+            continue
+
+        # Extract data from all objRows
+        for objRow in objRows:
+            objCells = objRow.find_all(['td'])
+            if len(objCells) == 2:
+                key = objCells[0].get_text(strip=True)
+                value = objCells[1].get_text(strip=True)
+                if value != "":  # Only add to dict if value is not empty
+                  dictReturn[key] = value
+
+    return dictReturn
 
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
     """
@@ -574,8 +614,8 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
-  objFileOut = GetFileHandle("c:/temp/ProdList.csv", "w")
-  objFileOut.write("ProductID,Brand,SKU,Name,SpecType\n")
+  objFileOut = GetFileHandle("c:/temp/Prodattr.csv", "w")
+  objFileOut.write("Attribute,value\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -605,10 +645,20 @@ def main():
     LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts))
     iPage += 1
     for dictProduct in dictProducts:
-      strSpecType = GetSpecificationsFollower(dictProduct["description"])
-      print("Product {} has the sku {} is called: {} and has specifications of type: {}".format(dictProduct["id"], dictProduct["sku"], dictProduct["name"], strSpecType))
-      strBrands = "{}".format(dictProduct["brands"])
-      objFileOut.write("{},{},{},{},{}\n".format(dictProduct["id"], strBrands.replace(',', ' '), dictProduct["sku"], dictProduct["name"].replace(","," "), strSpecType))
+      #strSpecType = GetSpecificationsFollower(dictProduct["description"])
+      dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
+      print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
+                                                             dictProduct["sku"], dictProduct["name"], len(dictProduct["attributes"])))
+      print("Has the following attributes in the description: {}".format(dictAttributes))
+      #strBrands = "{}".format(dictProduct["brands"])
+      strBrand = ""
+      dictBrands = dictProduct["brands"]
+      if isinstance(dictBrands, list):
+         if len(dictBrands) > 0:
+            strBrand = dictBrands[0]["name"]
+      objFileOut.write("*{} {} {}*,{} existing\n".format(strBrand, dictProduct["sku"], dictProduct["name"].replace(","," "), len(dictProduct["attributes"])))
+      for key, value in dictAttributes.items():
+        objFileOut.write("{},{}\n".format(key, value))
       objFileOut.flush()
 
   objFileOut.close()
