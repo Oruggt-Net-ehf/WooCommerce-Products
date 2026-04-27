@@ -479,7 +479,7 @@ def main():
   global strScriptHost
 
   dictProxies = {}
-
+# TODO: add audit option where it just lists the products and attribute count into a file, without doing any updates.
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator")
