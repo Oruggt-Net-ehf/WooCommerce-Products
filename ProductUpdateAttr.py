@@ -173,7 +173,9 @@ def CleanExit(strCause,bLog=True):
   if bLog:
     LogEntry("{} is exiting abnormally on {}: {}".format(
         strScriptName, strScriptHost, strCause), 0)
-
+  if objFileOut is not None:
+    objFileOut.close()
+    LogEntry("objFileOut closed", 1)
   objLogOut.close()
   print("objLogOut closed")
 
@@ -303,7 +305,7 @@ def GetFileHandle(strFileName, strperm):
         if len(strperm) > 1:
           objFileHndl = open(strFileName, strperm)
         else:
-          objFileHndl = open(strFileName, strperm, encoding='utf8')
+          objFileHndl = open(strFileName, strperm, encoding='utf8', buffering=1)
         return objFileHndl
     except PermissionError:
         LogEntry("unable to open output file {} for {}, "
@@ -477,6 +479,7 @@ def main():
   global dictProxies
   global strScriptName
   global strScriptHost
+  global objFileOut
 
   dictProxies = {}
   strOutDir = None
@@ -539,7 +542,7 @@ def main():
   iLoc = strScriptName.rfind(".")
 
   strLogFile = strLogDir + strScriptName[:iLoc] + ISO + ".log"
-  objLogOut = open(strLogFile, "a", 1)
+  objLogOut = GetFileHandle(strLogFile, "w")
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
   bAudit = objArgs.audit
@@ -634,9 +637,14 @@ def main():
     strToken = None
 
   strOutDir = objArgs.outdir if objArgs.outdir else strDefOutDir
+  strOutDir = strOutDir.replace("\\", "/")
+  if strOutDir[-1:] != "/":
+    strOutDir += "/"
   if not os.path.exists(strOutDir):
     os.makedirs(strOutDir)
     LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir))
+  else:
+    LogEntry("Output directory {} already exists.".format(strOutDir))
 
 
   if strAction == "FIX":
@@ -680,16 +688,18 @@ def main():
 
   dictHeader = {}
   strMethod = "get"
-  strAction = "/wp-json/wc/v3/products/attributes"
+  strEndPoint = "/wp-json/wc/v3/products/attributes"
   dictGlobalAttributes = {}
-  strURL = strBaseURL + strAction
+  strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
   LogEntry("API call successful, processing response. {} total attributes in response, {} total pages".format(strTotal, strTotalPages),0)
   dictAttrCollection = dictResponse[1]
-  if len(dictAttrCollection) != strTotal:
+  if len(dictAttrCollection) != int(strTotal):
     LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), strTotal))
+  else:
+    LogEntry("Total attributes in response matches total in header. {} attributes".format(strTotal))
 
   #objAttrOut = GetFileHandle("c:/temp/GlobalAttr.csv", "w")
   #objAttrOut.write("ID,Name,slug,type,has_archives\n")
@@ -703,16 +713,20 @@ def main():
   #objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
   #objFileOut.write("|Attribute|value|\n|----|----|\n")
   if strAction == "AUDIT":
+   LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName))
    objFileOut = GetFileHandle(strOutFileName, "w")
+   if objFileOut is None or isinstance(objFileOut, str):
+     objFileOut = None
+     LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
    objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
-  strAction = "/wp-json/wc/v3/products"
+  strEndPoint = "/wp-json/wc/v3/products"
   dictHeader = {}
   strMethod = "get"
   dictParams = {}
-  lstAttribs = []
+  #lstAttribs = []
   dictParams["per_page"] = iPerPage
   if strFilter is not None:
      lstFilters = strFilter.split("&")
@@ -722,10 +736,10 @@ def main():
            LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
            dictParams[strFilterKey] = strFilterValue
   while iProdCount > 0:
-    LogEntry("Fetching page {} of products".format(iPage))
+    LogEntry("Fetching products, page {} of {}".format(iPage, strTotalPages))
     dictParams["page"] = iPage
     strParams = urlparse.urlencode(dictParams)
-    strURL = strBaseURL + strAction + "?" + strParams
+    strURL = strBaseURL + strEndPoint + "?" + strParams
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
