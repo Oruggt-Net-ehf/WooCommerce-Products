@@ -108,6 +108,48 @@ def AttributeExists(listAttributeCollection, strSearchName):
 
     return False
 
+def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
+    """
+    Create a new global attribute in WooCommerce and return its ID.
+
+    Parameters:
+        strAttributeName (str): The name of the attribute to create
+        strBaseURL (str): The base URL of the WooCommerce site
+        strWCKey (str): WooCommerce API consumer key
+        strWCSecret (str): WooCommerce API consumer secret
+
+    Returns:
+        int: The ID of the newly created attribute, or None if creation failed
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products/attributes"
+    strURL = strBaseURL + strEndPoint
+
+    # Create the payload with the attribute name
+    dictPayload = {
+        "name": strAttributeName.strip()
+    }
+
+    LogEntry("Creating new attribute: {}".format(strAttributeName), 2)
+
+    # Make the API call
+    dictResponse = MakeAPICall(strURL, dictHeader, strMethod, dictPayload, strUser=strWCKey, strPWD=strWCSecret)
+
+    # Check if the call was successful
+    if dictResponse[0]["Success"] == False:
+        LogEntry("Failed to create attribute '{}'. Error: {}".format(strAttributeName, dictResponse[1]), 0, False)
+        return None
+
+    # Extract the ID from the response
+    if dictResponse[1] and isinstance(dictResponse[1], dict) and "id" in dictResponse[1]:
+        iNewAttributeID = dictResponse[1]["id"]
+        LogEntry("Successfully created attribute '{}' with ID: {}".format(strAttributeName, iNewAttributeID), 2)
+        return iNewAttributeID
+    else:
+        LogEntry("Attribute created but could not extract ID from response", 0, False)
+        return None
+
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
     """
     Handles fetching items from 1Password based on the provided collection of item specifications.
@@ -202,7 +244,7 @@ def CleanExit(strCause,bLog=True):
   objLogOut.close()
   print("objLogOut closed")
 
-  sentry_sdk.capture_exception(Exception(strCause))
+  #sentry_sdk.capture_exception(Exception(strCause))
   sys.exit(9)
 
 def LogEntry(strMsg, iMsgLevel=0, bAbort=False):
@@ -788,11 +830,18 @@ def main():
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "UPDATE":
-         for strKey in dictAttributes.items():
+         for dictKey in dictAttributes.items():
+            strKey = dictKey[0]
+            if strKey.strip().lower() in dictGlobalAttributes:
+               iAttrID = dictGlobalAttributes[strKey.strip().lower()]
+            else:
+               iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+            #iAttrID = dictGlobalAttributes[strKey.strip().lower()] if strKey.strip().lower() in dictGlobalAttributes else "unknown"
             if AttributeExists(lstProdAttribs, strKey):
                LogEntry("Attribute {} exists.".format(strKey))
             else:
-               LogEntry("Attribute {} does not exist".format(strKey))
+               LogEntry("Attribute {} does not exist. Need to add {} to attributeID {} ".format(
+                  strKey, dictKey[1],iAttrID))
       #print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
       #                                                       dictProduct["sku"], dictProduct["name"], len(lstProdAttribs)))
       #print("Has the following attributes in the description: {}".format(dictAttributes))
