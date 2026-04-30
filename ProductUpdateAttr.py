@@ -128,7 +128,7 @@ def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
 
     # Create the payload with the attribute name
     dictPayload = {
-        "name": strAttributeName.strip()
+        "name": strAttributeName.strip()[:28]
     }
 
     LogEntry("Creating new attribute: {}".format(strAttributeName), 2)
@@ -669,14 +669,14 @@ def main():
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
       strDefOutDir = strBaseDir + "Output/"
-    if "AccountName" in objConfig["Generic"]:
-      strAccountName = objConfig["Generic"]["AccountName"]
-    else:
-      LogEntry("Account name not found in config")
     if "Filter" in objConfig["Generic"]:
       strFilter = objConfig["Generic"]["Filter"]
     else:
       strFilter = None
+    if "AttrEq" in objConfig["Generic"]:
+      strAttrEq = objConfig["Generic"]["AttrEq"]
+    else:
+      strAttrEq = None
     if "PerPage" in objConfig["Generic"]:
       if isInt(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
@@ -686,6 +686,10 @@ def main():
   else:
     LogEntry("section Generic not found in config")
   if "WPCreds" in objConfig:
+    if "AccountName" in objConfig["WPCreds"]:
+      strAccountName = objConfig["WPCreds"]["AccountName"]
+    else:
+      LogEntry("Account name not found in config")
     if "VaultID" in objConfig["WPCreds"]:
       strVaultID = objConfig["WPCreds"]["VaultID"]
     else:
@@ -793,8 +797,16 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictParams = {}
+  dictEqParams = {}
   #lstAttribs = []
   dictParams["per_page"] = iPerPage
+  if strAttrEq is not None:
+     lstAttrEq = strAttrEq.split("&")
+     for strAttr in lstAttrEq:
+        if "|" in strAttr:
+           strAttrKey, strAttrValue = strAttr.split("|", 1)
+           LogEntry("Changing attribute {} to {}".format(strAttrKey, strAttrValue))
+           dictParams[strAttrKey] = strAttrValue
   if strFilter is not None:
      lstFilters = strFilter.split("&")
      for lstFilter in lstFilters:
@@ -831,17 +843,22 @@ def main():
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "UPDATE":
          for dictKey in dictAttributes.items():
-            strKey = dictKey[0]
-            if strKey.strip().lower() in dictGlobalAttributes:
-               iAttrID = dictGlobalAttributes[strKey.strip().lower()]
+            if dictKey[0] in dictEqParams:
+               strKey = dictEqParams[dictKey[0]]
             else:
+              strKey = dictKey[0].strip()[:28]
+            strValue = dictKey[1].split(",")
+            if strKey.lower() in dictGlobalAttributes:
+               iAttrID = dictGlobalAttributes[strKey.lower()]
+            else:
+               LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
                iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
             #iAttrID = dictGlobalAttributes[strKey.strip().lower()] if strKey.strip().lower() in dictGlobalAttributes else "unknown"
             if AttributeExists(lstProdAttribs, strKey):
                LogEntry("Attribute {} exists.".format(strKey))
             else:
                LogEntry("Attribute {} does not exist. Need to add {} to attributeID {} ".format(
-                  strKey, dictKey[1],iAttrID))
+                  strKey, strValue,iAttrID))
       #print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
       #                                                       dictProduct["sku"], dictProduct["name"], len(lstProdAttribs)))
       #print("Has the following attributes in the description: {}".format(dictAttributes))
