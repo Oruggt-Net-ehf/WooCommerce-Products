@@ -847,7 +847,10 @@ def main():
                strKey = dictEqParams[dictKey[0]]
             else:
               strKey = dictKey[0].strip()[:28]
-            strValue = dictKey[1].split(",")
+            if strKey == "MTBF":
+              strValue = dictKey[1]
+            else:
+              strValue = dictKey[1].split(",")
             if strKey.lower() in dictGlobalAttributes:
                iAttrID = dictGlobalAttributes[strKey.lower()]
             else:
