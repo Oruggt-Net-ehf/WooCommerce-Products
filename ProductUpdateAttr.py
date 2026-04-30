@@ -479,15 +479,31 @@ def main():
   global strScriptHost
 
   dictProxies = {}
-# TODO: add audit option where it just lists the products and attribute count into a file, without doing any updates.
+  strOutDir = None
+  objFileOut = None
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
-  objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator")
+  objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
+                                      "Must specify one Action directive, otherwise defaults to audit. "
+                                      "If no config file is specified, it will look for {} in the same directory as the script.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
                       action="store_true", help="only output to file, not to screen")
+  objParser.add_argument("--audit", dest="audit",
+                      action="store_true", help="Action directive. Only audit products and attributes, no updates. "
+                      "Default action if no other action is specified.")
+  objParser.add_argument("--update", dest="update",
+                      action="store_true", help="Action directive. Update all products with attributes parsed from description. "
+                      "Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--import", dest="prodimport",
+                      action="store_true", help="Action directive. Create new products based on import file."
+                      "Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--fix", dest="fix",
+                      action="store_true", help="Action directive. Fix product descriptions."
+                      "Required unless you specify another action, only one action can be specified.")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
+  objParser.add_argument("-o", "--outdir", type=str, help="Output directory for generated files")
 
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
@@ -526,6 +542,31 @@ def main():
   objLogOut = open(strLogFile, "a", 1)
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
+  bAudit = objArgs.audit
+  bUpdate = objArgs.update
+  bImport = objArgs.prodimport
+  bFix = objArgs.fix
+
+  # Validate that only one action is specified
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix])
+  if iActionCount > 1:
+    LogEntry("Error: More than one action directive specified. "
+             "Only one of --audit, --update, --import, or --fix can be used.",0,True)
+  elif iActionCount == 0:
+    bAudit = True
+    LogEntry("No action directive specified, defaulting to --audit")
+
+  # Determine and set the action string
+  if bAudit:
+    strAction = "AUDIT"
+  elif bUpdate:
+    strAction = "UPDATE"
+  elif bImport:
+    strAction = "IMPORT"
+  elif bFix:
+    strAction = "FIX"
+
+  LogEntry("Selected action: {}".format(strAction))
 
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it."
@@ -556,6 +597,10 @@ def main():
   objConFileHndl.close()
 
   if "Generic" in objConfig:
+    if "OutDir" in objConfig["Generic"]:
+      strDefOutDir = objConfig["Generic"]["OutDir"]
+    else:
+      strDefOutDir = strBaseDir + "Output/"
     if "AccountName" in objConfig["Generic"]:
       strAccountName = objConfig["Generic"]["AccountName"]
     else:
@@ -587,6 +632,30 @@ def main():
   strToken = FetchEnv("TOKEN")
   if not strToken:
     strToken = None
+
+  strOutDir = objArgs.outdir if objArgs.outdir else strDefOutDir
+  if not os.path.exists(strOutDir):
+    os.makedirs(strOutDir)
+    LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir))
+
+
+  if strAction == "FIX":
+    LogEntry("FIX action is not implemented yet, exiting.",0,True)
+    # TODO: implement the fix action, which will go through products and
+    # flush out the description and put the specifications into attributes,
+    # Use Claude to populate both description and short description based on the product information,
+
+  if strAction == "IMPORT":
+    LogEntry("IMPORT action is not implemented yet, exiting.",0,True)
+    # TODO: implement the import action, which will read a file with product information
+    # and create new products in WooCommerce based on that. Have Claude generate the product description
+    # and short description based on the product information in the file, and populate attributes as well.
+
+  if strAction == "UPDATE":
+    LogEntry("UPDATE action is not implemented yet, exiting.",0,True)
+    # TODO: implement the update action, which will go through all products, parse the description
+    # for specifications, and create attributes based on that.
+
   dictItemCollection = {}
   dictItemSpecs = {}
   dictItemSpecs["vault_id"] = strVaultID
@@ -622,16 +691,20 @@ def main():
   if len(dictAttrCollection) != strTotal:
     LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), strTotal))
 
-  objAttrOut = GetFileHandle("c:/temp/GlobalAttr.csv", "w")
-  objAttrOut.write("ID,Name,slug,type,has_archives\n")
+  #objAttrOut = GetFileHandle("c:/temp/GlobalAttr.csv", "w")
+  #objAttrOut.write("ID,Name,slug,type,has_archives\n")
 
   for dictAttr in dictAttrCollection:
     dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
-    objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"], dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
-  objAttrOut.close()
+  #  objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"], dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
+  #objAttrOut.close()
 
-  objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
-  objFileOut.write("|Attribute|value|\n|----|----|\n")
+  strOutFileName = strOutDir + "ProdattrAudit.csv"
+  #objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
+  #objFileOut.write("|Attribute|value|\n|----|----|\n")
+  if strAction == "AUDIT":
+   objFileOut = GetFileHandle(strOutFileName, "w")
+   objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -674,17 +747,22 @@ def main():
       if isinstance(dictBrands, list):
          if len(dictBrands) > 0:
             strBrand = dictBrands[0]["name"]
-      if len(dictAttributes) > 0:
-        objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
-      for key, value in dictAttributes.items():
-        objFileOut.write("|{}|{}|\n".format(key, value))
-        if key not in lstAttribs:
-          lstAttribs.append(key)
-      objFileOut.flush()
+      if strAction == "AUDIT":
+        objFileOut.write("{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
+            dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"]), len(dictAttributes)))
+        objFileOut.flush()
 
-  objFileOut.close()
-  for strAttrib in lstAttribs:
-    print("Found attribute: {}".format(strAttrib))
+      #if len(dictAttributes) > 0:
+      #  objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
+      #for key, value in dictAttributes.items():
+      #  objFileOut.write("|{}|{}|\n".format(key, value))
+      #  if key not in lstAttribs:
+      #    lstAttribs.append(key)
+
+  if objFileOut is not None:
+    objFileOut.close()
+  #for strAttrib in lstAttribs:
+  #  print("Found attribute: {}".format(strAttrib))
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
 
