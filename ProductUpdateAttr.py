@@ -85,6 +85,29 @@ def ExtractTwoColumnTables(strHTML):
 
     return dictReturn
 
+def AttributeExists(listAttributeCollection, strSearchName):
+    """
+    Check if a string can be found in a WooCommerce attribute collection.
+
+    Parameters:
+        listAttributeCollection (list): A list of attribute dictionaries from WooCommerce
+        strSearchName (str): The attribute name string to search for
+
+    Returns:
+        bool: True if the attribute name is found in the collection (case-insensitive), False otherwise
+    """
+    if not listAttributeCollection:
+        return False
+
+    strSearchLower = strSearchName.strip().lower()
+
+    for dictAttribute in listAttributeCollection:
+        if isinstance(dictAttribute, dict) and "name" in dictAttribute:
+            if dictAttribute["name"].strip().lower() == strSearchLower:
+                return True
+
+    return False
+
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
     """
     Handles fetching items from 1Password based on the provided collection of item specifications.
@@ -659,8 +682,8 @@ def main():
     # and create new products in WooCommerce based on that. Have Claude generate the product description
     # and short description based on the product information in the file, and populate attributes as well.
 
-  if strAction == "UPDATE":
-    LogEntry("UPDATE action is not implemented yet, exiting.",0,True)
+  #if strAction == "UPDATE":
+  #  LogEntry("UPDATE action is not implemented yet, exiting.",0,True)
     # TODO: implement the update action, which will go through all products, parse the description
     # for specifications, and create attributes based on that.
 
@@ -694,7 +717,8 @@ def main():
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-  LogEntry("API call successful, processing response. {} total attributes in response, {} total pages".format(strTotal, strTotalPages),0)
+  LogEntry("API call successful, processing response. "
+             "{} total attributes in response, {} total pages".format(strTotal, strTotalPages),0)
   dictAttrCollection = dictResponse[1]
   if len(dictAttrCollection) != int(strTotal):
     LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), strTotal))
@@ -706,7 +730,8 @@ def main():
 
   for dictAttr in dictAttrCollection:
     dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
-  #  objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"], dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
+  #  objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"],
+  # dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
   #objAttrOut.close()
 
   strOutFileName = strOutDir + "ProdattrAudit.csv"
@@ -743,7 +768,8 @@ def main():
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-    LogEntry("API call successful, processing response. {} total products in response, {} total pages".format(strTotal, strTotalPages),0)
+    LogEntry("API call successful, processing response. "
+             "{} total products in response, {} total pages".format(strTotal, strTotalPages),0)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
     iTotalProducts += iProdCount
@@ -756,9 +782,20 @@ def main():
                                                                 dictProduct["sku"], dictProduct["name"]))
         continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
-      print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
-                                                             dictProduct["sku"], dictProduct["name"], len(dictProduct["attributes"])))
-      print("Has the following attributes in the description: {}".format(dictAttributes))
+      lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
+      LogEntry("Working on product {} with SKU {} and name {}. "
+               "It has {} existing attributes and {} attributes in the description.".format(
+                  dictProduct["id"], dictProduct["sku"], dictProduct["name"],
+                  len(lstProdAttribs), len(dictAttributes)))
+      if strAction == "UPDATE":
+         for strKey in dictAttributes.items():
+            if AttributeExists(lstProdAttribs, strKey):
+               LogEntry("Attribute {} exists.".format(strKey))
+            else:
+               LogEntry("Attribute {} does not exist".format(strKey))
+      #print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
+      #                                                       dictProduct["sku"], dictProduct["name"], len(lstProdAttribs)))
+      #print("Has the following attributes in the description: {}".format(dictAttributes))
       #strBrands = "{}".format(dictProduct["brands"])
       strBrand = "No Brand"
       dictBrands = dictProduct["brands"]
@@ -767,11 +804,12 @@ def main():
             strBrand = dictBrands[0]["name"]
       if strAction == "AUDIT":
         objFileOut.write("{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"]), len(dictAttributes)))
+            dictProduct["name"].replace(","," ").strip(), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
       #if len(dictAttributes) > 0:
-      #  objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
+      #  objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(),
+      # dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
       #for key, value in dictAttributes.items():
       #  objFileOut.write("|{}|{}|\n".format(key, value))
       #  if key not in lstAttribs:
