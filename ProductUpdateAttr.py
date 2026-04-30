@@ -751,6 +751,10 @@ def main():
     iPage += 1
     for dictProduct in dictProducts:
       #strSpecType = GetSpecificationsFollower(dictProduct["description"])
+      if "description" not in dictProduct or dictProduct["description"] is None:
+        LogEntry("Product {} with SKU {} and name {} has no description, skipping.".format(dictProduct["id"],
+                                                                dictProduct["sku"], dictProduct["name"]))
+        continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
                                                              dictProduct["sku"], dictProduct["name"], len(dictProduct["attributes"])))
