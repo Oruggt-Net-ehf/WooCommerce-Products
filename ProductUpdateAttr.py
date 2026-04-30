@@ -842,26 +842,29 @@ def main():
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "UPDATE":
-         for dictKey in dictAttributes.items():
-            if dictKey[0] in dictEqParams:
-               strKey = dictEqParams[dictKey[0]]
-            else:
-              strKey = dictKey[0].strip()[:28]
-            if strKey == "MTBF":
-              strValue = dictKey[1]
-            else:
-              strValue = dictKey[1].split(",")
-            if strKey.lower() in dictGlobalAttributes:
-               iAttrID = dictGlobalAttributes[strKey.lower()]
-            else:
-               LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
-               iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
-            #iAttrID = dictGlobalAttributes[strKey.strip().lower()] if strKey.strip().lower() in dictGlobalAttributes else "unknown"
-            if AttributeExists(lstProdAttribs, strKey):
-               LogEntry("Attribute {} exists.".format(strKey))
-            else:
-               LogEntry("Attribute {} does not exist. Need to add {} to attributeID {} ".format(
-                  strKey, strValue,iAttrID))
+        for dictKey in dictAttributes.items():
+          if dictKey[0] in dictEqParams:
+              strKey = dictEqParams[dictKey[0]]
+          else:
+            strKey = dictKey[0].strip()[:28]
+          if strKey == "MTBF":
+            lstValue = [dictKey[1]]
+          else:
+            lstValue = dictKey[1].split(",")
+          if strKey.lower() in dictGlobalAttributes:
+              iAttrID = dictGlobalAttributes[strKey.lower()]
+          else:
+              LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
+              iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+          #iAttrID = dictGlobalAttributes[strKey.strip().lower()] if strKey.strip().lower() in dictGlobalAttributes else "unknown"
+          if AttributeExists(lstProdAttribs, strKey):
+              LogEntry("Attribute {} exists.".format(strKey))
+          else:
+              LogEntry("Attribute {} does not exist. Need to add {} to attributeID {} ".format(
+                strKey, lstValue, iAttrID))
+              lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
+        LogEntry("Need to post new attributes {}".format(lstProdAttribs))
+
       #print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
       #                                                       dictProduct["sku"], dictProduct["name"], len(lstProdAttribs)))
       #print("Has the following attributes in the description: {}".format(dictAttributes))
