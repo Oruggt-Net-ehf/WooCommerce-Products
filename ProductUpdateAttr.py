@@ -720,18 +720,19 @@ def main():
   else:
     LogEntry("section Generic not found in config")
   if "WPCreds" in objConfig:
-    if "AccountName" in objConfig["WPCreds"]:
-      strAccountName = objConfig["WPCreds"]["AccountName"]
-    else:
-      LogEntry("Account name not found in config")
-    if "VaultID" in objConfig["WPCreds"]:
-      strVaultID = objConfig["WPCreds"]["VaultID"]
-    else:
-      LogEntry("VaultID not found in config")
-    if "ItemID" in objConfig["WPCreds"]:
-      strItemID = objConfig["WPCreds"]["ItemID"]
-    else:
-      LogEntry("ItemID not found in config")
+    if strAuthMethod == "1pa":
+      if "AccountName" in objConfig["WPCreds"]:
+        strAccountName = objConfig["WPCreds"]["AccountName"]
+      else:
+        LogEntry("Account name not found in config")
+      if "VaultID" in objConfig["WPCreds"]:
+        strVaultID = objConfig["WPCreds"]["VaultID"]
+      else:
+        LogEntry("VaultID not found in config")
+      if "ItemID" in objConfig["WPCreds"]:
+        strItemID = objConfig["WPCreds"]["ItemID"]
+      else:
+        LogEntry("ItemID not found in config")
     if "ConsumerKeyField" in objConfig["WPCreds"]:
       strConsumerKeyField = objConfig["WPCreds"]["ConsumerKeyField"]
     else:
