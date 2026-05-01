@@ -937,13 +937,14 @@ def main():
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "UPDATE":
+        bNeedUpdate = False
         for dictKey in dictAttributes.items():
           if dictKey[0] in dictAttrEq:
             strKey = dictAttrEq[dictKey[0]]
             LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
           else:
             strKey = dictKey[0].strip()[:28]
-          if strKey == "MTBF":
+          if strKey == "MTBF" or strKey == "LED lifetime":
             lstValue = [dictKey[1]]
           else:
             lstValue = dictKey[1].split(",")
@@ -958,15 +959,16 @@ def main():
             LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
               strKey, lstValue, iAttrID))
             lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
+            bNeedUpdate = True
 
-        dictResult = UpdateWooCommerceProduct({"attributes": lstProdAttribs},dictProduct["id"],
+        if bNeedUpdate:
+          dictResult = UpdateWooCommerceProduct({"attributes": lstProdAttribs},dictProduct["id"],
                                               strBaseURL, strWCKey, strWCSecret)
-        if dictResult[0]["Success"]:
-          LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
-        else:
-           LogEntry("Failed to update product {} with new attributes. "
-                    "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
-        #LogEntry("Need to post new attributes {}".format(lstProdAttribs))
+          if dictResult[0]["Success"]:
+            LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
+          else:
+            LogEntry("Failed to update product {} with new attributes. "
+                      "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
       strBrand = "No Brand"
       dictBrands = dictProduct["brands"]
