@@ -959,7 +959,7 @@ def main():
               strKey, lstValue, iAttrID))
             lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
 
-        dictResult = UpdateWooCommerceProduct(dictProduct["id"], {"attributes": lstProdAttribs},
+        dictResult = UpdateWooCommerceProduct({"attributes": lstProdAttribs},dictProduct["id"],
                                               strBaseURL, strWCKey, strWCSecret)
         if dictResult[0]["Success"]:
           LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
