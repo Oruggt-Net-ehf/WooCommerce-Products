@@ -872,6 +872,8 @@ def main():
     # and create new products in WooCommerce based on that. Have Claude generate the product description
     # and short description based on the product information in the file, and populate attributes as well.
 
+    # Need a function that handles all of this.
+
     objLogOut.close()
     print("objLogOut closed")
     return
@@ -882,7 +884,7 @@ def main():
     # flush out the description and put the specifications into attributes,
     # Use Claude to populate both description and short description based on the product information,
 
-    strFilter = "status:draft|tag:needsfixing"
+    strFilter = "status:draft|tag:1490|category:107"
 
   if strAction == "AUDIT":
     if bTimeStampAudit:
@@ -910,6 +912,8 @@ def main():
            strFilterKey, strFilterValue = lstFilter.split(":", 1)
            LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
            dictParams[strFilterKey] = strFilterValue
+  if strAction == "UPDATE":
+     dictParams["status"] = "publish"
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
     dictParams["page"] = iPage
@@ -936,6 +940,15 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
+      if strAction == "FIX":
+        LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
+        #dictNewDesc = FixProductDescription(dictProduct["description"])
+        #strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
+        #strNewName = dictNewDesc["name"] if "name" in dictNewDesc else dictProduct["name"]
+        #strShortDesc = dictNewDesc["short_descr"] if "short_descr" in dictNewDesc else dictProduct["short_description"]
+        #dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
+        #  "short_description": strShortDesc},dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+
       if strAction == "UPDATE":
         bNeedUpdate = False
         for dictKey in dictAttributes.items():
