@@ -1024,6 +1024,9 @@ def main():
           if AttributeExists(lstProdAttribs, strKey):
             LogEntry("Attribute {} already on product.".format(strKey))
           else:
+            if iAttrID is None:
+              LogEntry("Failed to create attribute {}. Skipping this attribute.".format(strKey),0,False)
+              continue
             LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
               strKey, lstValue, iAttrID))
             lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
