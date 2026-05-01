@@ -149,6 +149,22 @@ def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
         LogEntry("Attribute created but could not extract ID from response", 0, False)
         return None
 
+def GetEnvCreds(dictCollectionIn):
+    """
+    Fetches WooCommerce API credentials from environment variables.
+    dictCollection: Dictionary of dictionaries with name of env variables to fetch
+    Returns:  Diction of dictionary of the values retrieved from the environment variables, with the same keys as the input dictionary
+    """
+
+    dictCollection = {}
+    dictItems = {}
+    for dictItem in dictCollectionIn:
+        for strEnvName in dictItem:
+          dictItems[strEnvName] = FetchEnv(strEnvName)
+        dictCollection[dictItem["name"]] = dictItems
+
+    return dictCollection
+
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
     """
     Handles fetching items from 1Password based on the provided collection of item specifications.
@@ -386,18 +402,17 @@ def GetFileHandle(strFileName, strperm):
 
 def FetchEnv(strVarName):
   """
-  Function that fetches the specified content of specified environment variable,
-  converting nonetype to empty string.
+  Function that fetches the specified content of specified environment variable.
   Parameters:
     strVarName: The name of the environment variable to be fetched
   Returns:
-    The content of the environment or empty string
+    The content of the environment or none if the variable is not set or is blank
   """
 
   if os.getenv(strVarName) != "" and os.getenv(strVarName) is not None:
     return os.getenv(strVarName)
   else:
-    return ""
+    return None
 
 def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objData=None, strUser="", strPWD=""):
   """
@@ -545,7 +560,6 @@ def main():
   global strScriptName
   global strScriptHost
   global objFileOut
-
 
   dictProxies = {}
   strOutDir = None
@@ -755,24 +769,39 @@ def main():
   else:
     LogEntry("Output directory {} good to go.".format(strOutDir))
 
-  dictItemCollection = {}
-  dictItemSpecs = {}
-  dictItemSpecs["vault_id"] = strVaultID
-  dictItemSpecs["item_id"] = strItemID
-  dictItemCollection["Creds"] = dictItemSpecs
+  if strAuthMethod == "1pa":
+    dictItemCollection = {}
+    dictItemSpecs = {}
+    dictItemSpecs["vault_id"] = strVaultID
+    dictItemSpecs["item_id"] = strItemID
+    dictItemCollection["Creds"] = dictItemSpecs
 
-  LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
-     strAccountName, "provided" if strToken else "not provided"))
+    LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
+      strAccountName, "provided" if strToken else "not provided"))
 
-  returned_dict = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=strToken))
-  if returned_dict is None:
-    LogEntry("Failed to retrieve item.",0,True)
-  if "fatal error" in returned_dict:
-    LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
+    returned_dict = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=strToken))
+    if returned_dict is None:
+      LogEntry("Failed to retrieve item.",0,True)
+    if "fatal error" in returned_dict:
+      LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
+  elif strAuthMethod == "env":
+    LogEntry("Using environment variable authentication method. Fetching credentials from environment variables.")
+    dictItemCollection = {}
+    dictItemSpecs = {}
+    dictItemSpecs["BaseURLField"] = strBaseURLField
+    dictItemSpecs["ConsumerKeyField"] = strConsumerKeyField
+    dictItemSpecs["ConsumerSecretField"] = strConsumerSecretField
+    dictItemCollection["Creds"] = dictItemSpecs
+
+    dictCreds = GetEnvCreds(dictItemCollection)
+    if not dictCreds:
+      LogEntry("Failed to retrieve credentials from environment variables. Make sure WC_API_URL, WC_API_KEY, and WC_API_SECRET are set.",0,True)
 
   strBaseURL = returned_dict["Creds"][strBaseURLField]
   strWCKey = returned_dict["Creds"][strConsumerKeyField]
   strWCSecret = returned_dict["Creds"][strConsumerSecretField]
+
+
 
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
