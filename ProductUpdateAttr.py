@@ -625,7 +625,7 @@ def main():
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
 
-  ISO = time.strftime("-%Y-%m-%d")
+  ISO = time.strftime("-%Y-%m-%d-%H-%M-%S")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
   strRealPath = os.path.realpath(sys.argv[0]).replace("\\", "/")
 
@@ -731,7 +731,7 @@ def main():
     if "FileTimeStampFormat" in objConfig["Generic"]:
       strTimeStampFormat = objConfig["Generic"]["FileTimeStampFormat"]
     else:
-      strTimeStampFormat = "%Y-%m-%d %H:%M:%S"
+      strTimeStampFormat = "%Y-%m-%d-%H-%M-%S"
     if "TimeStampAudit" in objConfig["Generic"]:
       bTimeStampAudit = objConfig["Generic"]["TimeStampAudit"].lower() == "true"
     else:
@@ -1020,6 +1020,7 @@ def main():
           else:
             LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
             iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+            dictGlobalAttributes[strKey.lower()] = iAttrID
           if AttributeExists(lstProdAttribs, strKey):
             LogEntry("Attribute {} already on product.".format(strKey))
           else:
