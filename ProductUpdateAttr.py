@@ -149,6 +149,39 @@ def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
         LogEntry("Attribute created but could not extract ID from response", 0, False)
         return None
 
+def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strWCSecret):
+    """
+    Update a specific product in WooCommerce with the provided product data.
+
+    Parameters:
+        dictProduct (dict): The product data/collection to send (keys can include name, description, attributes, etc.)
+        iProductID (int): The WooCommerce product ID to update
+        strBaseURL (str): The base URL of the WooCommerce site
+        strWCKey (str): WooCommerce API consumer key
+        strWCSecret (str): WooCommerce API consumer secret
+
+    Returns:
+        tuple: ({"Success": True/False}, response_data)
+               Where response_data is the updated product object on success, or error details on failure
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products/{}".format(iProductID)
+    strURL = strBaseURL + strEndPoint
+
+    LogEntry("Updating WooCommerce product ID: {}".format(iProductID), 2)
+
+    # Make the API call
+    dictResponse = MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
+
+    # Check if the call was successful
+    if dictResponse[0]["Success"] == False:
+        LogEntry("Failed to update product ID {}. Error: {}".format(iProductID, dictResponse[1]), 0, False)
+        return dictResponse
+
+    LogEntry("Successfully updated product ID: {}".format(iProductID), 2)
+    return dictResponse
+
 def GetEnvCreds(dictCollectionIn):
     """
     Fetches WooCommerce API credentials from environment variables.
