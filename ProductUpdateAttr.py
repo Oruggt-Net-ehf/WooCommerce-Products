@@ -740,6 +740,18 @@ def main():
       strFilter = objConfig["Generic"]["Filter"]
     else:
       strFilter = None
+    if "FixStatus" in objConfig["Generic"]:
+      strFixStatus = objConfig["Generic"]["FixStatus"]
+    else:
+      strFixStatus = None
+    if "FixTag" in objConfig["Generic"]:
+      strFixTag = objConfig["Generic"]["FixTag"]
+    else:
+      strFixTag = None
+    if "FixCategory" in objConfig["Generic"]:
+      strFixCategory = objConfig["Generic"]["FixCategory"]
+    else:
+      strFixCategory = None
     if "AttrEqFile" in objConfig["Generic"]:
       strAttrEqFile = objConfig["Generic"]["AttrEqFile"]
     else:
@@ -866,12 +878,45 @@ def main():
   for dictAttr in dictAttrCollection:
     dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
 
+  strEndPoint = "/wp-json/wc/v3/products/categories"
+  dictGlobalCategories = {}
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+  LogEntry("API call successful, processing response. "
+             "{} total categories in response, {} total pages".format(iTotal, iTotalPages),0)
+  dictCatCollection = dictResponse[1]
+  if len(dictCatCollection) != iTotal:
+    LogEntry("Warning, total categories in response does not match total in header. {} vs {}".format(len(dictCatCollection), iTotal))
+  else:
+    LogEntry("Total categories in response matches total in header. {} categories".format(iTotal))
+
+  for dictCat in dictCatCollection:
+    dictGlobalCategories[dictCat["name"].strip().lower()] = dictCat["id"]
+
+  strEndPoint = "/wp-json/wc/v3/products/tags"
+  dictGlobalTags = {}
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+  LogEntry("API call successful, processing response. "
+             "{} total tags in response, {} total pages".format(iTotal, iTotalPages),0)
+  dictTagCollection = dictResponse[1]
+  if len(dictTagCollection) != iTotal:
+    LogEntry("Warning, total tags in response does not match total in header. {} vs {}".format(len(dictTagCollection), iTotal))
+  else:
+    LogEntry("Total tags in response matches total in header. {} tags".format(iTotal))
+
+  for dictTag in dictTagCollection:
+    dictGlobalTags[dictTag["name"].strip().lower()] = dictTag["id"]
+
   if strAction == "IMPORT":
     LogEntry("IMPORT action is not implemented yet, exiting.")
     # TODO: implement the import action, which will read a file with product information
     # and create new products in WooCommerce based on that. Have Claude generate the product description
     # and short description based on the product information in the file, and populate attributes as well.
-
     # Need a function that handles all of this.
 
     objLogOut.close()
@@ -884,7 +929,14 @@ def main():
     # flush out the description and put the specifications into attributes,
     # Use Claude to populate both description and short description based on the product information,
 
-    strFilter = "status:draft|tag:1490|category:107"
+    strFilter = ""
+    if strFixStatus is not None:
+      strFilter += "status:{}|".format(strFixStatus)
+    if strFixTag is not None:
+      strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
+    if strFixCategory is not None:
+      strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
+    #strFilter = "status:draft|tag:1490|category:107"
 
   if strAction == "AUDIT":
     if bTimeStampAudit:
@@ -906,6 +958,8 @@ def main():
   dictParams = {}
   dictParams["per_page"] = iPerPage
   if strFilter is not None:
+     if strFilter.endswith("|"):
+        strFilter = strFilter[:-1]
      lstFilters = strFilter.split("|")
      for lstFilter in lstFilters:
         if ":" in lstFilter:
