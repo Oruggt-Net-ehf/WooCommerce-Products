@@ -1,0 +1,19 @@
+Power;Power Source
+Max power consumption without attachments;MaxUsage wout attachment
+Number of 25G SFP28 ports;25G SFP28 ports
+Number of 100G QSFP28 ports;100G QSFP28 ports
+Max out per port output (input 18-30 V);MaxOut/port (18-30v)
+Wireless 5 GHz Max data rate;Wifi 5GHz Max Data rate
+Wireless 5 GHz number of chains;Wifi 5GHz chains
+Wireless 2.4 GHz Max data rate;Wifi 2.4GHz Max Data rate
+Wireless 2.4 GHz number of chains;Wifi 2.4GHz chains
+10/100 Ethernet ports;100M Ethernet Ports
+Max out per port output (input 30-57 V);MaxOut/port (30-57v)
+Wireless 2.4 GHz/5 GHz Max data rate;Max Data Rate 2.4/5GHZ
+Wireless 2.4 GHz/5 GHz number of chains;Wifi Chains 2.4/5GHz
+Wireless 2.4 GHz/5 GHz standards;Wifi standards 2.4/GHz
+Antenna gain dBi for 2.4 GHz/5 GHz;AntGain dBi 2.4/5GHz
+Wireless 2.4 GHz/5 GHz chip model;Wifi Chip Model 2.4/5GHz
+Wireless 2.4 GHz/5 GHz generation;Wifi Gen 2.4/5GHz
+Number of Combo 10G Ethernet/ SFP+ ports;10G SFP+ Ethernet Ports
+Power Supply;Power Source

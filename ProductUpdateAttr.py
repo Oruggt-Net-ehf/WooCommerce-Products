@@ -41,7 +41,6 @@ else:
 # Few globals
 tLastCall = 0
 iTotalSleep = 0
-iLogLevel = 4  # How much logging should be done. Level 10 is debug level, 0 is none
 iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 2  # Minimum time in seconds between API calls
 strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
@@ -269,6 +268,7 @@ def LogEntry(strMsg, iMsgLevel=0, bAbort=False):
   else:
     if bAbort:
       objLogOut.write("{0} : {1}\n".format(strTimeStamp, strMsg))
+  objLogOut.flush()
 
   if bAbort:
     CleanExit(strMsg,bLog=False)
@@ -422,8 +422,8 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   global iTotalSleep
   global iStatusCode
   global strScriptHost
-  global strTotal
-  global strTotalPages
+  global iTotal
+  global iTotalPages
 
   fTemp = time.time()
   fDelta = fTemp - tLastCall
@@ -505,8 +505,8 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   LogEntry("call resulted in status code {}".format(
     WebRequest.status_code), 3)
   iStatusCode = int(WebRequest.status_code)
-  strTotal = WebRequest.headers.get("X-WP-Total", "not present")
-  strTotalPages = WebRequest.headers.get("X-WP-TotalPages", "not present")
+  iTotal = int(WebRequest.headers.get("X-WP-Total", -1))
+  iTotalPages = int(WebRequest.headers.get("X-WP-TotalPages", -1))
 
   if not 200 <= iStatusCode <= 299:
     LogEntry("call resulted in status code {}".format(WebRequest.status_code),3)
@@ -546,6 +546,7 @@ def main():
   global strScriptHost
   global objFileOut
 
+
   dictProxies = {}
   strOutDir = None
   objFileOut = None
@@ -553,7 +554,8 @@ def main():
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
                                       "Must specify one Action directive, otherwise defaults to audit. "
-                                      "If no config file is specified, it will look for {} in the same directory as the script.".format(strDefConf))
+                                      "If no config file is specified, "
+                                      "it will look for {} in the same directory as the script.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
                       action="store_true", help="only output to file, not to screen")
   objParser.add_argument("--audit", dest="audit",
@@ -576,26 +578,20 @@ def main():
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
 
-  print("sysargv is {}".format(sys.argv[0]))
   ISO = time.strftime("-%Y-%m-%d")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
   strRealPath = os.path.realpath(sys.argv[0]).replace("\\", "/")
-  print("Real path is {}".format(strRealPath))
 
   strBaseDir = os.path.dirname(sys.argv[0])
-  print("Base dir is *{}*".format(strBaseDir))
   if strBaseDir == "":
     iLoc = strRealPath.rfind("/")
     strBaseDir = strRealPath[:iLoc]
   if strBaseDir[-1:] != "/":
     strBaseDir += "/"
-  print("real path is {}".format(strRealPath))
-  print("Base dir is {}".format(strBaseDir))
 
   strLogDir  = strBaseDir + "Logs/"
   if strLogDir[-1:] != "/":
     strLogDir += "/"
-  print("Log dir is {}".format(strLogDir))
 
   iLoc = sys.argv[0].rfind(".")
 
@@ -614,6 +610,13 @@ def main():
   bUpdate = objArgs.update
   bImport = objArgs.prodimport
   bFix = objArgs.fix
+
+  LogEntry("This is a script to parse WooCommerce product description for specifications "
+           "and create product attributes from it."
+          "This is running under Python Version {}".format(strVersion))
+  LogEntry("Running from: {}".format(strRealPath))
+  dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
+  LogEntry("The script started at {}".format(dtNow))
 
   # Validate that only one action is specified
   iActionCount = sum([bAudit, bUpdate, bImport, bFix])
@@ -636,13 +639,6 @@ def main():
 
   LogEntry("Selected action: {}".format(strAction))
 
-  LogEntry("This is a script to parse WooCommerce product description for specifications "
-           "and create product attributes from it."
-          "This is running under Python Version {}".format(strVersion))
-  LogEntry("Running from: {}".format(strRealPath))
-  dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
-  LogEntry("The script started at {}".format(dtNow))
-
   if FetchEnv("PROXY") is not None:
     strProxy = os.getenv("PROXY")
   if objArgs.proxy is not None:
@@ -659,12 +655,23 @@ def main():
   else:
     LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
     strConfile = strDefConf
+  if os.path.isfile(strConfile):
+    LogEntry ("Configuration File {} exists".format(strConfile))
+  else:
+    LogEntry ("Can't find configuration file {}, exiting.".format(strConfile),0,True)
+
   objConFileHndl = GetFileHandle(strConfile, "r")
   objConfig = configparser.ConfigParser()
   objConfig.read_file(objConFileHndl)
   objConFileHndl.close()
 
   if "Generic" in objConfig:
+    if "AuthMethod" in objConfig["Generic"]:
+      strAuthMethod = objConfig["Generic"]["AuthMethod"].strip().lower()[:3]
+      if strAuthMethod not in ["env", "1pa"]:
+        LogEntry("Invalid AuthMethod specified in config. Must be 'env' or '1Password', "
+                 "case insensitive and only the first three characters are relevant. Defaulting to '1Password'.")
+        strAuthMethod = "1pa"
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -698,6 +705,18 @@ def main():
       strItemID = objConfig["WPCreds"]["ItemID"]
     else:
       LogEntry("ItemID not found in config")
+    if "ConsumerKeyField" in objConfig["WPCreds"]:
+      strConsumerKeyField = objConfig["WPCreds"]["ConsumerKeyField"]
+    else:
+      LogEntry("ConsumerKeyField not found in config")
+    if "ConsumerSecretField" in objConfig["WPCreds"]:
+      strConsumerSecretField = objConfig["WPCreds"]["ConsumerSecretField"]
+    else:
+      LogEntry("ConsumerSecretField not found in config")
+    if "BaseURLField" in objConfig["WPCreds"]:
+      strBaseURLField = objConfig["WPCreds"]["BaseURLField"]
+    else:
+      LogEntry("BaseURLField not found in config")
   else:
     LogEntry("section WPCreds not found in config")
 
@@ -713,7 +732,7 @@ def main():
     os.makedirs(strOutDir)
     LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir))
   else:
-    LogEntry("Output directory {} already exists.".format(strOutDir))
+    LogEntry("Output directory {} good to go.".format(strOutDir))
 
 
   if strAction == "FIX":
@@ -727,11 +746,6 @@ def main():
     # TODO: implement the import action, which will read a file with product information
     # and create new products in WooCommerce based on that. Have Claude generate the product description
     # and short description based on the product information in the file, and populate attributes as well.
-
-  #if strAction == "UPDATE":
-  #  LogEntry("UPDATE action is not implemented yet, exiting.",0,True)
-    # TODO: implement the update action, which will go through all products, parse the description
-    # for specifications, and create attributes based on that.
 
   dictItemCollection = {}
   dictItemSpecs = {}
@@ -748,9 +762,9 @@ def main():
   if "fatal error" in returned_dict:
     LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
 
-  strBaseURL = returned_dict["Creds"]["hostname"]
-  strWCKey = returned_dict["Creds"]["username"]
-  strWCSecret = returned_dict["Creds"]["credential"]
+  strBaseURL = returned_dict["Creds"][strBaseURLField]
+  strWCKey = returned_dict["Creds"][strConsumerKeyField]
+  strWCSecret = returned_dict["Creds"][strConsumerSecretField]
 
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
@@ -764,32 +778,24 @@ def main():
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
   LogEntry("API call successful, processing response. "
-             "{} total attributes in response, {} total pages".format(strTotal, strTotalPages),0)
+             "{} total attributes in response, {} total pages".format(iTotal, iTotalPages),0)
   dictAttrCollection = dictResponse[1]
-  if len(dictAttrCollection) != int(strTotal):
-    LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), strTotal))
+  if len(dictAttrCollection) != iTotal:
+    LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), iTotal))
   else:
-    LogEntry("Total attributes in response matches total in header. {} attributes".format(strTotal))
-
-  #objAttrOut = GetFileHandle("c:/temp/GlobalAttr.csv", "w")
-  #objAttrOut.write("ID,Name,slug,type,has_archives\n")
+    LogEntry("Total attributes in response matches total in header. {} attributes".format(iTotal))
 
   for dictAttr in dictAttrCollection:
     dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
-  #  objAttrOut.write("{},{},{},{},{}\n".format(dictAttr["id"], dictAttr["name"],
-  # dictAttr["slug"], dictAttr["type"], dictAttr["has_archives"]))
-  #objAttrOut.close()
 
-  strOutFileName = strOutDir + "ProdattrAudit.csv"
-  #objFileOut = GetFileHandle("c:/temp/Prodattr.md", "w")
-  #objFileOut.write("|Attribute|value|\n|----|----|\n")
   if strAction == "AUDIT":
-   LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName))
-   objFileOut = GetFileHandle(strOutFileName, "w")
-   if objFileOut is None or isinstance(objFileOut, str):
-     objFileOut = None
-     LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
-   objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
+    strOutFileName = strOutDir + "ProdattrAudit.csv"
+    LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName))
+    objFileOut = GetFileHandle(strOutFileName, "w")
+    if objFileOut is None or isinstance(objFileOut, str):
+      objFileOut = None
+      LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
+    objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -798,7 +804,6 @@ def main():
   strMethod = "get"
   dictParams = {}
   dictEqParams = {}
-  #lstAttribs = []
   dictParams["per_page"] = iPerPage
   if strAttrEq is not None:
      lstAttrEq = strAttrEq.split("&")
@@ -806,16 +811,16 @@ def main():
         if "|" in strAttr:
            strAttrKey, strAttrValue = strAttr.split("|", 1)
            LogEntry("Changing attribute {} to {}".format(strAttrKey, strAttrValue))
-           dictParams[strAttrKey] = strAttrValue
+           dictEqParams[strAttrKey] = strAttrValue
   if strFilter is not None:
-     lstFilters = strFilter.split("&")
+     lstFilters = strFilter.split("|")
      for lstFilter in lstFilters:
         if ":" in lstFilter:
            strFilterKey, strFilterValue = lstFilter.split(":", 1)
            LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
            dictParams[strFilterKey] = strFilterValue
   while iProdCount > 0:
-    LogEntry("Fetching products, page {} of {}".format(iPage, strTotalPages))
+    LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
     dictParams["page"] = iPage
     strParams = urlparse.urlencode(dictParams)
     strURL = strBaseURL + strEndPoint + "?" + strParams
@@ -823,14 +828,13 @@ def main():
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
     LogEntry("API call successful, processing response. "
-             "{} total products in response, {} total pages".format(strTotal, strTotalPages),0)
+             "{} total products in response, {} total pages".format(iTotal, iTotalPages),0)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
     iTotalProducts += iProdCount
     LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts))
     iPage += 1
     for dictProduct in dictProducts:
-      #strSpecType = GetSpecificationsFollower(dictProduct["description"])
       if "description" not in dictProduct or dictProduct["description"] is None:
         LogEntry("Product {} with SKU {} and name {} has no description, skipping.".format(dictProduct["id"],
                                                                 dictProduct["sku"], dictProduct["name"]))
@@ -856,7 +860,6 @@ def main():
           else:
               LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
               iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
-          #iAttrID = dictGlobalAttributes[strKey.strip().lower()] if strKey.strip().lower() in dictGlobalAttributes else "unknown"
           if AttributeExists(lstProdAttribs, strKey):
               LogEntry("Attribute {} exists.".format(strKey))
           else:
@@ -865,10 +868,6 @@ def main():
               lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
         LogEntry("Need to post new attributes {}".format(lstProdAttribs))
 
-      #print("Product {} has the sku {} is called: {} and has {} attributes".format(dictProduct["id"],
-      #                                                       dictProduct["sku"], dictProduct["name"], len(lstProdAttribs)))
-      #print("Has the following attributes in the description: {}".format(dictAttributes))
-      #strBrands = "{}".format(dictProduct["brands"])
       strBrand = "No Brand"
       dictBrands = dictProduct["brands"]
       if isinstance(dictBrands, list):
@@ -879,18 +878,8 @@ def main():
             dictProduct["name"].replace(","," ").strip(), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
-      #if len(dictAttributes) > 0:
-      #  objFileOut.write("|**{} {}** ; {} existing attributes|\n".format(strBrand.strip(),
-      # dictProduct["name"].replace(","," ").strip(), len(dictProduct["attributes"])))
-      #for key, value in dictAttributes.items():
-      #  objFileOut.write("|{}|{}|\n".format(key, value))
-      #  if key not in lstAttribs:
-      #    lstAttribs.append(key)
-
   if objFileOut is not None:
     objFileOut.close()
-  #for strAttrib in lstAttribs:
-  #  print("Found attribute: {}".format(strAttrib))
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
 
