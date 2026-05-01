@@ -676,14 +676,22 @@ def main():
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
       strDefOutDir = strBaseDir + "Output/"
+    if "FileTimeStampFormat" in objConfig["Generic"]:
+      strTimeStampFormat = objConfig["Generic"]["FileTimeStampFormat"]
+    else:
+      strTimeStampFormat = "%Y-%m-%d %H:%M:%S"
+    if "TimeStampAudit" in objConfig["Generic"]:
+      bTimeStampAudit = objConfig["Generic"]["TimeStampAudit"].lower() == "true"
+    else:
+      bTimeStampAudit = True
     if "Filter" in objConfig["Generic"]:
       strFilter = objConfig["Generic"]["Filter"]
     else:
       strFilter = None
-    if "AttrEq" in objConfig["Generic"]:
-      strAttrEq = objConfig["Generic"]["AttrEq"]
+    if "AttrEqFile" in objConfig["Generic"]:
+      strAttrEqFile = objConfig["Generic"]["AttrEqFile"]
     else:
-      strAttrEq = None
+      strAttrEqFile = None
     if "PerPage" in objConfig["Generic"]:
       if isInt(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
@@ -720,6 +728,19 @@ def main():
   else:
     LogEntry("section WPCreds not found in config")
 
+  if strAttrEqFile is not None:
+    if os.path.isfile(strAttrEqFile):
+      LogEntry("Attribute equivalence file {} found, processing.".format(strAttrEqFile))
+      objAttrEqFileHndl = GetFileHandle(strAttrEqFile, "r")
+      dictAttrEq = {}
+      for strLine in objAttrEqFileHndl:
+        if ";" in strLine:
+          strKey, strValue = strLine.split(";", 1)
+          dictAttrEq[strKey.strip()] = strValue.strip()
+      objAttrEqFileHndl.close()
+    else:
+      LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile))
+
   strToken = FetchEnv("TOKEN")
   if not strToken:
     strToken = None
@@ -733,19 +754,6 @@ def main():
     LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir))
   else:
     LogEntry("Output directory {} good to go.".format(strOutDir))
-
-
-  if strAction == "FIX":
-    LogEntry("FIX action is not implemented yet, exiting.",0,True)
-    # TODO: implement the fix action, which will go through products and
-    # flush out the description and put the specifications into attributes,
-    # Use Claude to populate both description and short description based on the product information,
-
-  if strAction == "IMPORT":
-    LogEntry("IMPORT action is not implemented yet, exiting.",0,True)
-    # TODO: implement the import action, which will read a file with product information
-    # and create new products in WooCommerce based on that. Have Claude generate the product description
-    # and short description based on the product information in the file, and populate attributes as well.
 
   dictItemCollection = {}
   dictItemSpecs = {}
@@ -769,6 +777,8 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
+  LogEntry("Successfully retrieved credentials from 1Password. "
+           "Now fetching global attributes from WooCommerce to prepare for product updates.")
   dictHeader = {}
   strMethod = "get"
   strEndPoint = "/wp-json/wc/v3/products/attributes"
@@ -788,8 +798,29 @@ def main():
   for dictAttr in dictAttrCollection:
     dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
 
+  if strAction == "IMPORT":
+    LogEntry("IMPORT action is not implemented yet, exiting.")
+    # TODO: implement the import action, which will read a file with product information
+    # and create new products in WooCommerce based on that. Have Claude generate the product description
+    # and short description based on the product information in the file, and populate attributes as well.
+
+    objLogOut.close()
+    print("objLogOut closed")
+    return
+
+  if strAction == "FIX":
+    LogEntry("FIX action is not implemented yet, exiting.",0,True)
+    # TODO: implement the fix action, which will go through products and
+    # flush out the description and put the specifications into attributes,
+    # Use Claude to populate both description and short description based on the product information,
+
+    strFilter = "status:draft|tag:needsfixing"
+
   if strAction == "AUDIT":
-    strOutFileName = strOutDir + "ProdattrAudit.csv"
+    if bTimeStampAudit:
+      strOutFileName = strOutDir + "ProdattrAudit_" + time.strftime(strTimeStampFormat) + ".csv"
+    else:
+      strOutFileName = strOutDir + "ProdattrAudit.csv"
     LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName))
     objFileOut = GetFileHandle(strOutFileName, "w")
     if objFileOut is None or isinstance(objFileOut, str):
@@ -803,15 +834,7 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictParams = {}
-  dictEqParams = {}
   dictParams["per_page"] = iPerPage
-  if strAttrEq is not None:
-     lstAttrEq = strAttrEq.split("&")
-     for strAttr in lstAttrEq:
-        if "|" in strAttr:
-           strAttrKey, strAttrValue = strAttr.split("|", 1)
-           LogEntry("Changing attribute {} to {}".format(strAttrKey, strAttrValue))
-           dictEqParams[strAttrKey] = strAttrValue
   if strFilter is not None:
      lstFilters = strFilter.split("|")
      for lstFilter in lstFilters:
@@ -847,8 +870,9 @@ def main():
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "UPDATE":
         for dictKey in dictAttributes.items():
-          if dictKey[0] in dictEqParams:
-              strKey = dictEqParams[dictKey[0]]
+          if dictKey[0] in dictAttrEq:
+              strKey = dictAttrEq[dictKey[0]]
+              LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
           else:
             strKey = dictKey[0].strip()[:28]
           if strKey == "MTBF":
@@ -861,9 +885,9 @@ def main():
               LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
               iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
           if AttributeExists(lstProdAttribs, strKey):
-              LogEntry("Attribute {} exists.".format(strKey))
+              LogEntry("Attribute {} already on product.".format(strKey))
           else:
-              LogEntry("Attribute {} does not exist. Need to add {} to attributeID {} ".format(
+              LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
                 strKey, lstValue, iAttrID))
               lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
         LogEntry("Need to post new attributes {}".format(lstProdAttribs))
@@ -882,6 +906,10 @@ def main():
     objFileOut.close()
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
+
+  objLogOut.close()
+  print("objLogOut closed")
+
 
 
 
