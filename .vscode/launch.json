@@ -11,7 +11,8 @@
       "request": "launch",
       "program": "${file}",
       "console": "integratedTerminal",
-      "args": ["--update"]
+      "args": ["--update"],
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }

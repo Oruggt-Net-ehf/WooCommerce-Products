@@ -158,10 +158,10 @@ def GetEnvCreds(dictCollectionIn):
 
     dictCollection = {}
     dictItems = {}
-    for dictItem in dictCollectionIn:
-        for strEnvName in dictItem:
+    for strCredName, dictItem in dictCollectionIn.items():
+        for strKey, strEnvName in dictItem.items():
           dictItems[strEnvName] = FetchEnv(strEnvName)
-        dictCollection[dictItem["name"]] = dictItems
+        dictCollection[strCredName] = dictItems
 
     return dictCollection
 
@@ -654,7 +654,9 @@ def main():
   LogEntry("Selected action: {}".format(strAction))
 
   if FetchEnv("PROXY") is not None:
-    strProxy = os.getenv("PROXY")
+    strProxy = FetchEnv("PROXY")
+  else:
+    strProxy = None
   if objArgs.proxy is not None:
     strProxy = objArgs.proxy
   if strProxy is not None:
@@ -686,6 +688,9 @@ def main():
         LogEntry("Invalid AuthMethod specified in config. Must be 'env' or '1Password', "
                  "case insensitive and only the first three characters are relevant. Defaulting to '1Password'.")
         strAuthMethod = "1pa"
+    else:
+      LogEntry("AuthMethod not found in config, defaulting to '1Password'.")
+      strAuthMethod = "1pa"
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -770,6 +775,7 @@ def main():
     LogEntry("Output directory {} good to go.".format(strOutDir))
 
   if strAuthMethod == "1pa":
+    strCredMethod = "1Password"
     dictItemCollection = {}
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strVaultID
@@ -785,6 +791,7 @@ def main():
     if "fatal error" in returned_dict:
       LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
   elif strAuthMethod == "env":
+    strCredMethod = "Environment Variables"
     LogEntry("Using environment variable authentication method. Fetching credentials from environment variables.")
     dictItemCollection = {}
     dictItemSpecs = {}
@@ -793,21 +800,19 @@ def main():
     dictItemSpecs["ConsumerSecretField"] = strConsumerSecretField
     dictItemCollection["Creds"] = dictItemSpecs
 
-    dictCreds = GetEnvCreds(dictItemCollection)
-    if not dictCreds:
-      LogEntry("Failed to retrieve credentials from environment variables. Make sure WC_API_URL, WC_API_KEY, and WC_API_SECRET are set.",0,True)
+    returned_dict = GetEnvCreds(dictItemCollection)
+    if not returned_dict or "Creds" not in returned_dict:
+      LogEntry("Failed to retrieve credentials from environment variables.",0,True)
 
   strBaseURL = returned_dict["Creds"][strBaseURLField]
   strWCKey = returned_dict["Creds"][strConsumerKeyField]
   strWCSecret = returned_dict["Creds"][strConsumerSecretField]
 
-
-
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
-  LogEntry("Successfully retrieved credentials from 1Password. "
-           "Now fetching global attributes from WooCommerce to prepare for product updates.")
+  LogEntry("Successfully retrieved credentials from {}. "
+           "Now fetching global attributes from WooCommerce to prepare for product updates.".format(strCredMethod))
   dictHeader = {}
   strMethod = "get"
   strEndPoint = "/wp-json/wc/v3/products/attributes"
