@@ -939,8 +939,8 @@ def main():
       if strAction == "UPDATE":
         for dictKey in dictAttributes.items():
           if dictKey[0] in dictAttrEq:
-              strKey = dictAttrEq[dictKey[0]]
-              LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
+            strKey = dictAttrEq[dictKey[0]]
+            LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
           else:
             strKey = dictKey[0].strip()[:28]
           if strKey == "MTBF":
@@ -948,17 +948,25 @@ def main():
           else:
             lstValue = dictKey[1].split(",")
           if strKey.lower() in dictGlobalAttributes:
-              iAttrID = dictGlobalAttributes[strKey.lower()]
+            iAttrID = dictGlobalAttributes[strKey.lower()]
           else:
-              LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
-              iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+            LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
+            iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
           if AttributeExists(lstProdAttribs, strKey):
-              LogEntry("Attribute {} already on product.".format(strKey))
+            LogEntry("Attribute {} already on product.".format(strKey))
           else:
-              LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
-                strKey, lstValue, iAttrID))
-              lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
-        LogEntry("Need to post new attributes {}".format(lstProdAttribs))
+            LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
+              strKey, lstValue, iAttrID))
+            lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
+
+        dictResult = UpdateWooCommerceProduct(dictProduct["id"], {"attributes": lstProdAttribs},
+                                              strBaseURL, strWCKey, strWCSecret)
+        if dictResult[0]["Success"]:
+          LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
+        else:
+           LogEntry("Failed to update product {} with new attributes. "
+                    "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+        #LogEntry("Need to post new attributes {}".format(lstProdAttribs))
 
       strBrand = "No Brand"
       dictBrands = dictProduct["brands"]
