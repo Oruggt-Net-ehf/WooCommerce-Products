@@ -203,7 +203,7 @@ def AttributeExists(listAttributeCollection, strSearchName):
         if dictAttribute["name"].strip().lower() == strSearchLower:
           if dictAttribute["id"] == 0:
             LogEntry("Attribute {} is local".format(strSearchName))
-            return "local"
+            return dictAttribute
           else:
             return "global"
 
@@ -1154,7 +1154,7 @@ def main():
       if strAction == "UPDATE":
         # Here is the reall UPDATE work going on. Finding tech specs in description and apply it as an attribute
         bNeedUpdate = False
-        for dictKey in dictAttributes.items():
+        for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
           if dictKey[0].strip() in dictAttrEq:
             strKey = dictAttrEq[dictKey[0].strip()]
             LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
@@ -1170,15 +1170,21 @@ def main():
             LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
             iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
             dictGlobalAttributes[strKey.lower()[:28]] = iAttrID
-          if AttributeExists(lstProdAttribs, strKey[:28]):
-            LogEntry("Attribute {} already on product.".format(strKey))
+          AttrFound = AttributeExists(lstProdAttribs, strKey[:28])
+          if isinstance(AttrFound,str) and AttrFound == "global":
+            LogEntry("Attribute {} already on product as global.".format(strKey))
           else:
             if iAttrID is None:
               LogEntry("Failed to create attribute {} on product {}. Skipping this attribute.".format(strKey, dictProduct["id"]),0,False)
               continue
-            LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
+            LogEntry("Attribute {} is not on product, or is local. Need to add {} to attributeID {} ".format(
               strKey, lstValue, iAttrID))
             lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
+            if isinstance(AttrFound,dict):
+               if AttrFound["variation"]:
+                  LogEntry("WARNING!! Converted attribute {} used for variation from local to global. "
+                           "ID:{} SKU:{} Name:{}".format(strKey, dictProduct["id"], dictProduct["sku"], dictProduct["name"]))
+               lstProdAttribs.remove(AttrFound)
             bNeedUpdate = True
 
         if bNeedUpdate:
