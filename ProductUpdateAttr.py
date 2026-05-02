@@ -191,7 +191,7 @@ def AttributeExists(listAttributeCollection, strSearchName):
         strSearchName (str): The attribute name string to search for
 
     Returns:
-        bool: True if the attribute name is found in the collection (case-insensitive), False otherwise
+        str: if the attribute name is found in the collection (case-insensitive) returns local or global as appropriate, false otherwise
     """
     if not listAttributeCollection:
         return False
@@ -199,11 +199,15 @@ def AttributeExists(listAttributeCollection, strSearchName):
     strSearchLower = strSearchName.strip().lower()
 
     for dictAttribute in listAttributeCollection:
-        if isinstance(dictAttribute, dict) and "name" in dictAttribute:
-            if dictAttribute["name"].strip().lower() == strSearchLower:
-                return True
+      if isinstance(dictAttribute, dict) and "name" in dictAttribute:
+        if dictAttribute["name"].strip().lower() == strSearchLower:
+          if dictAttribute["id"] == 0:
+            LogEntry("Attribute {} is local".format(strSearchName))
+            return "local"
+          else:
+            return "global"
 
-    return False
+    return "false"
 
 def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
     """
