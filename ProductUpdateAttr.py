@@ -18,10 +18,12 @@ pip install beautifulsoup4
 import os
 import time
 import sys
+from unittest import result
 import requests
 import sentry_sdk
 import argparse
 import configparser
+import csv
 from onepassword import Client, DesktopAuth
 import asyncio
 import platform
@@ -54,6 +56,102 @@ sentry_sdk.init(
 
 # sub defs
 
+def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
+    """
+    Create a new WooCommerce product using the REST API.
+    Parameters:
+    dictProduct (dict): A dictionary containing the product data to create.
+                        Keys can include name, description, regular_price, sku, etc.
+    strBaseURL (str): The base URL of the WooCommerce site (e.g., "https://example.com")
+    strWCKey (str): WooCommerce API consumer key
+    strWCSecret (str): WooCommerce API consumer secret
+
+    Returns: A tuple of the form ({"Success": True/False}, response_data)
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products"
+    strURL = strBaseURL + strEndPoint
+
+    LogEntry("Creating WooCommerce product SKU: {}".format(dictProduct.get("sku")))
+    return MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
+
+def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecret, strDelim=","):
+    """
+    Read a CSV file with columns:
+    Brand, sku, EAN/GTIN, Name, Descr, Price, Cost, Stock, Allow Backorder, Enable Reviews
+    and create new WooCommerce simple products for each row.
+
+    Parameters:
+    strCSVPath (str): The file path to the CSV file to read
+    strBaseURL (str): The base URL of the WooCommerce site (e.g., "https://example.com")
+    strWCKey (str): WooCommerce API consumer key
+    strWCSecret (str): WooCommerce API consumer secret
+    strDelim (str): The strDelim used in the CSV file, defaults to comma (",")
+
+    Returns:
+    list of tuples: Each tuple contains (sku, API response) for each product creation attempt
+    API response is a tuple of the form ({"Success": True/False}, response_data)
+    """
+    lstResults = []
+    # TODO: Need a function that sends all the details over Claude for full product descr
+
+    with open(strCSVPath, mode="r", newline="", encoding="utf-8-sig") as objCSVFile:
+        objCSVReader = csv.DictReader(objCSVFile, delimiter=strDelim)
+        for objRow in objCSVReader:
+            strSKU = (objRow.get("sku") or objRow.get("SKU") or "").strip()
+            if not strSKU:
+                LogEntry("Skipping objRow with missing SKU")
+                continue
+
+            strDescr = (objRow.get("Descr") or "").strip()
+            strBackorders = objRow.get("Allow Backorder", "")
+            if not strBackorders:
+                strBackorders = "no"
+            strAllowReviews = objRow.get("Enable Reviews", "")
+            if not strAllowReviews:
+                strAllowReviews = "no"
+            bAllowReviews = strAllowReviews.lower() == "true"
+            strQTY = objRow.get("Stock", "").strip()
+            strPrice = objRow.get("Price", "").strip()
+            strGTIN = objRow.get("EAN/GTIN", "").strip()
+            strBrand = objRow.get("Brand", "").strip()
+            if strBrand in dictGlobalBrands:
+              lstBrandID = [int(dictGlobalBrands[strBrand])]
+            else:
+              iBrandID = CreateBrand(strBrand, strBaseURL, strWCKey, strWCSecret)
+              if iBrandID is not None:
+                dictGlobalBrands[strBrand] = int(iBrandID)
+                lstBrandID = [iBrandID]
+              else:
+                lstBrandID = []
+
+            dictProduct = {}
+            dictProduct["name"] = (objRow.get("Name") or "").strip()
+            dictProduct["type"] = "simple"
+            dictProduct["sku"] = strSKU
+            dictProduct["description"] = strDescr
+            dictProduct["short_description"] = strDescr
+            dictProduct["backorders"] = strBackorders
+            dictProduct["regular_price"] = strPrice if strPrice else None
+            dictProduct["reviews_allowed"] = bAllowReviews
+            dictProduct["manage_stock"] = True
+            dictProduct["global_unique_id"] = strGTIN
+            dictProduct["brands"] = lstBrandID
+            dictProduct["stock_quantity"] = int(strQTY)
+
+            # Remove None values so payload stays clean
+            dictCleaned = {}
+            for strKey, strValue in dictProduct.items():
+                if strValue is not None:
+                    dictCleaned[strKey] = strValue
+            dictProduct = dictCleaned
+
+            dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
+            lstResults.append((strSKU, dictResult))
+
+    return lstResults
+
 def ExtractTwoColumnTables(strHTML):
     """
     Extract all two-column tables from HTML and return as a dictionary.
@@ -70,7 +168,7 @@ def ExtractTwoColumnTables(strHTML):
     objTables = objSoup.find_all('table')
 
     for objTable in objTables:
-        # Get all rows
+        # Get all objRows
         objRows = objTable.find_all('tr')
 
         # Extract data from all objRows
@@ -147,6 +245,48 @@ def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
         return iNewAttributeID
     else:
         LogEntry("Attribute created but could not extract ID from response", 0, False)
+        return None
+
+def CreateBrand(strBrandName, strBaseURL, strWCKey, strWCSecret):
+    """
+    Create a new global brand in WooCommerce and return its ID.
+
+    Parameters:
+        strBrandName (str): The name of the brand to create
+        strBaseURL (str): The base URL of the WooCommerce site
+        strWCKey (str): WooCommerce API consumer key
+        strWCSecret (str): WooCommerce API consumer secret
+
+    Returns:
+        int: The ID of the newly created brand, or None if creation failed
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products/brands"
+    strURL = strBaseURL + strEndPoint
+
+    # Create the payload with the brand name
+    dictPayload = {
+        "name": strBrandName.strip()
+    }
+
+    LogEntry("Creating new brand: {}".format(strBrandName), 2)
+
+    # Make the API call
+    dictResponse = MakeAPICall(strURL, dictHeader, strMethod, dictPayload, strUser=strWCKey, strPWD=strWCSecret)
+
+    # Check if the call was successful
+    if dictResponse[0]["Success"] == False:
+        LogEntry("Failed to create brand '{}'. Error: {}".format(strBrandName, dictResponse[1]), 0, False)
+        return None
+
+    # Extract the ID from the response
+    if dictResponse[1] and isinstance(dictResponse[1], dict) and "id" in dictResponse[1]:
+        iNewBrandID = dictResponse[1]["id"]
+        LogEntry("Successfully created brand '{}' with ID: {}".format(strBrandName, iNewBrandID), 2)
+        return iNewBrandID
+    else:
+        LogEntry("Brand created but could not extract ID from response", 0, False)
         return None
 
 def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strWCSecret):
@@ -584,6 +724,22 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
+def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
+  LogEntry("Loading values from {}".format(strEndPoint))
+  dictHeader = {}
+  strMethod = "get"
+  dictGeneric = {}
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+  LogEntry("API call successful, processing response. "
+             "{} total attributes in response, {} total pages".format(iTotal, iTotalPages),0)
+
+  for dictEntry in dictResponse[1]:
+    dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
+  return dictGeneric
+
 def main():
   global strToken
   global bQuiet
@@ -593,6 +749,10 @@ def main():
   global strScriptName
   global strScriptHost
   global objFileOut
+  global dictGlobalAttributes
+  global dictGlobalCategories
+  global dictGlobalTags
+  global dictGlobalBrands
 
   dictProxies = {}
   strOutDir = None
@@ -728,6 +888,10 @@ def main():
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
       strDefOutDir = strBaseDir + "Output/"
+    if "ImportFile" in objConfig["Generic"]:
+      strImportFile = objConfig["Generic"]["ImportFile"]
+    else:
+       strImportFile = None
     if "FileTimeStampFormat" in objConfig["Generic"]:
       strTimeStampFormat = objConfig["Generic"]["FileTimeStampFormat"]
     else:
@@ -858,77 +1022,30 @@ def main():
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
   LogEntry("Successfully retrieved credentials from {}. "
-           "Now fetching global attributes from WooCommerce to prepare for product updates.".format(strCredMethod))
+           "Now loading various lists from WooCommerce to prepare for product updates.".format(strCredMethod))
   dictHeader = {}
   strMethod = "get"
-  strEndPoint = "/wp-json/wc/v3/products/attributes"
-  dictGlobalAttributes = {}
-  strURL = strBaseURL + strEndPoint
-  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-  LogEntry("API call successful, processing response. "
-             "{} total attributes in response, {} total pages".format(iTotal, iTotalPages),0)
-  dictAttrCollection = dictResponse[1]
-  if len(dictAttrCollection) != iTotal:
-    LogEntry("Warning, total attributes in response does not match total in header. {} vs {}".format(len(dictAttrCollection), iTotal))
-  else:
-    LogEntry("Total attributes in response matches total in header. {} attributes".format(iTotal))
-
-  for dictAttr in dictAttrCollection:
-    dictGlobalAttributes[dictAttr["name"].strip().lower()] = dictAttr["id"]
-
-  strEndPoint = "/wp-json/wc/v3/products/categories"
-  dictGlobalCategories = {}
-  strURL = strBaseURL + strEndPoint
-  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-  LogEntry("API call successful, processing response. "
-             "{} total categories in response, {} total pages".format(iTotal, iTotalPages),0)
-  dictCatCollection = dictResponse[1]
-  if len(dictCatCollection) != iTotal:
-    LogEntry("Warning, total categories in response does not match total in header. {} vs {}".format(len(dictCatCollection), iTotal))
-  else:
-    LogEntry("Total categories in response matches total in header. {} categories".format(iTotal))
-
-  for dictCat in dictCatCollection:
-    dictGlobalCategories[dictCat["name"].strip().lower()] = dictCat["id"]
-
-  strEndPoint = "/wp-json/wc/v3/products/tags"
-  dictGlobalTags = {}
-  strURL = strBaseURL + strEndPoint
-  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
-  LogEntry("API call successful, processing response. "
-             "{} total tags in response, {} total pages".format(iTotal, iTotalPages),0)
-  dictTagCollection = dictResponse[1]
-  if len(dictTagCollection) != iTotal:
-    LogEntry("Warning, total tags in response does not match total in header. {} vs {}".format(len(dictTagCollection), iTotal))
-  else:
-    LogEntry("Total tags in response matches total in header. {} tags".format(iTotal))
-
-  for dictTag in dictTagCollection:
-    dictGlobalTags[dictTag["name"].strip().lower()] = dictTag["id"]
+  dictGlobalAttributes = LoadDictionaries("/wp-json/wc/v3/products/attributes", strBaseURL, strWCKey, strWCSecret)
+  dictGlobalCategories = LoadDictionaries("/wp-json/wc/v3/products/categories", strBaseURL, strWCKey, strWCSecret)
+  dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
+  dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
 
   if strAction == "IMPORT":
-    LogEntry("IMPORT action is not implemented yet, exiting.")
-    # TODO: implement the import action, which will read a file with product information
-    # and create new products in WooCommerce based on that. Have Claude generate the product description
-    # and short description based on the product information in the file, and populate attributes as well.
-    # Need a function that handles all of this.
-
+    # The Import action takes place here
+    if strImportFile is not None:
+      if os.path.isfile(strImportFile):
+        lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,",")
+        LogEntry("Finished import, here are the results:\n{}".format(lstResults))
+      else:
+         LogEntry("Import File {} not found, can't do anything".format(strImportFile))
+    else:
+       LogEntry("Import File not defined, nothing to import")
     objLogOut.close()
     print("objLogOut closed")
     return
 
   if strAction == "FIX":
-    LogEntry("FIX action is not implemented yet, exiting.",0,True)
-    # TODO: implement the fix action, which will go through products and
-    # flush out the description and put the specifications into attributes,
-    # Use Claude to populate both description and short description based on the product information,
-
+    # here is the fix function initialized
     strFilter = ""
     if strFixStatus is not None:
       strFilter += "status:{}|".format(strFixStatus)
@@ -936,9 +1053,9 @@ def main():
       strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
     if strFixCategory is not None:
       strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
-    #strFilter = "status:draft|tag:1490|category:107"
 
   if strAction == "AUDIT":
+    # Here is the Audit function initialized
     if bTimeStampAudit:
       strOutFileName = strOutDir + "ProdattrAudit_" + time.strftime(strTimeStampFormat) + ".csv"
     else:
@@ -949,6 +1066,8 @@ def main():
       objFileOut = None
       LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
     objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
+
+  # Here is basic prep work for FIX, AUDIT and UPDATE
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -966,8 +1085,9 @@ def main():
            strFilterKey, strFilterValue = lstFilter.split(":", 1)
            LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
            dictParams[strFilterKey] = strFilterValue
-  if strAction == "UPDATE":
+  if strAction == "UPDATE": # Only update published products
      dictParams["status"] = "publish"
+  lstProductFailure = []
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
     dictParams["page"] = iPage
@@ -995,6 +1115,7 @@ def main():
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "FIX":
+        # TODO: Send product description to Claude to rewrite Name, Short Description and Long Description
         LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
         #dictNewDesc = FixProductDescription(dictProduct["description"])
         #strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
@@ -1004,28 +1125,29 @@ def main():
         #  "short_description": strShortDesc},dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
 
       if strAction == "UPDATE":
+        # Here is the reall UPDATE work going on. Finding tech specs in description and apply it as an attribute
         bNeedUpdate = False
         for dictKey in dictAttributes.items():
-          if dictKey[0] in dictAttrEq:
-            strKey = dictAttrEq[dictKey[0]]
+          if dictKey[0].strip() in dictAttrEq:
+            strKey = dictAttrEq[dictKey[0].strip()]
             LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
           else:
-            strKey = dictKey[0].strip()[:28]
+            strKey = dictKey[0].strip()
           if strKey == "MTBF" or strKey == "LED lifetime":
             lstValue = [dictKey[1]]
           else:
             lstValue = dictKey[1].split(",")
-          if strKey.lower() in dictGlobalAttributes:
-            iAttrID = dictGlobalAttributes[strKey.lower()]
+          if strKey.lower()[:28] in dictGlobalAttributes:
+            iAttrID = dictGlobalAttributes[strKey.lower()[:28]]
           else:
             LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
             iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
-            dictGlobalAttributes[strKey.lower()] = iAttrID
-          if AttributeExists(lstProdAttribs, strKey):
+            dictGlobalAttributes[strKey.lower()[:28]] = iAttrID
+          if AttributeExists(lstProdAttribs, strKey[:28]):
             LogEntry("Attribute {} already on product.".format(strKey))
           else:
             if iAttrID is None:
-              LogEntry("Failed to create attribute {}. Skipping this attribute.".format(strKey),0,False)
+              LogEntry("Failed to create attribute {} on product {}. Skipping this attribute.".format(strKey, dictProduct["id"]),0,False)
               continue
             LogEntry("Attribute {} is not on product. Need to add {} to attributeID {} ".format(
               strKey, lstValue, iAttrID))
@@ -1038,6 +1160,7 @@ def main():
           if dictResult[0]["Success"]:
             LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
           else:
+            lstProductFailure.append(dictProduct["id"])
             LogEntry("Failed to update product {} with new attributes. "
                       "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
@@ -1047,6 +1170,7 @@ def main():
          if len(dictBrands) > 0:
             strBrand = dictBrands[0]["name"]
       if strAction == "AUDIT":
+        # write out the audit file
         objFileOut.write("{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
             dictProduct["name"].replace(","," ").strip(), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
@@ -1055,6 +1179,7 @@ def main():
     objFileOut.close()
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
+  LogEntry("Products that failed to update: {}".format(lstProductFailure))
 
   objLogOut.close()
   print("objLogOut closed")
