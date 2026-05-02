@@ -729,15 +729,35 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
   dictHeader = {}
   strMethod = "get"
   dictGeneric = {}
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
   LogEntry("API call successful, processing response. "
-             "{} total attributes in response, {} total pages".format(iTotal, iTotalPages),0)
+             "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
 
   for dictEntry in dictResponse[1]:
     dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
+
+  iPage = 2
+  if len(dictResponse[1]) < iTotal:
+    while len(dictResponse[1])  > 0:
+      LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
+      dictParams["page"] = iPage
+      strParams = urlparse.urlencode(dictParams)
+      strURL = strBaseURL + strEndPoint + "?" + strParams
+      dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+      if dictResponse[0]["Success"]==False:
+        LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+      LogEntry("API call successful, processing response. "
+                "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
+      for dictEntry in dictResponse[1]:
+        dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
+      iPage += 1
+
+
   return dictGeneric
 
 def main():
@@ -753,6 +773,7 @@ def main():
   global dictGlobalCategories
   global dictGlobalTags
   global dictGlobalBrands
+  global iPerPage
 
   dictProxies = {}
   strOutDir = None
@@ -1116,7 +1137,9 @@ def main():
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "FIX":
         # TODO: Send product description to Claude to rewrite Name, Short Description and Long Description
+
         LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
+
         #dictNewDesc = FixProductDescription(dictProduct["description"])
         #strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
         #strNewName = dictNewDesc["name"] if "name" in dictNewDesc else dictProduct["name"]
