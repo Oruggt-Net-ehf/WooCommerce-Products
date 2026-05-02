@@ -17,6 +17,7 @@ Wireless 2.4 GHz/5 GHz generation;Wifi Gen 2.4/5GHz
 Number of Combo 10G Ethernet/ SFP+ ports;Combo 10G SFP+ Ports
 Number of 1G Ethernet ports;1G Ethernet Ports
 Number of 1G Ethernet ports with PoE-out;1G PoE-out Ports
+Number of 1G Ethernet ports with Reverse PoE (PoE-in);1G PoE-in Ports
 Power Supply;Power Source
 Output Power Options;Power Output
 Type;Product Type
