@@ -1267,8 +1267,8 @@ def main():
           for dictTag in lstCurTags:
             if dictTag["name"].lower() != strFixTag.lower():
                 lstCleanTags.append(dictTag)
-        if not lstCleanTags:
-           lstCleanTags = dictProduct["tags"]
+        else:
+          lstCleanTags = dictProduct["tags"]
         dictNewDesc = GenerateProductDescription(dictProduct["name"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
         if not isinstance(dictNewDesc,dict):
            LogEntry("New Description is not a dict, something went wrong with AI generation, "
