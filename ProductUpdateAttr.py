@@ -1278,9 +1278,11 @@ def main():
         strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
         dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
           "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+        dictAttributes = ExtractTwoColumnTables(strNewDesc)
+        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)))
 
-      if strAction == "UPDATE":
-        # Here is the reall UPDATE work going on. Finding tech specs in description and apply it as an attribute
+      if strAction == "UPDATE" or strAction == "FIX":
+        # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
         bNeedUpdate = False
         for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
           if dictKey[0].strip() in dictAttrEq:
