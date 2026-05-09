@@ -1082,8 +1082,11 @@ def main():
     else:
       LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile))
   if not isInt(iMaxTokens):
-     LogEntry("MaxToken value of '{}' is not valid. Settign it to the default of {}".format(iMaxTokens,iDefMaxToken))
-     iMaxTokens = iDefMaxToken
+    LogEntry("MaxToken value of '{}' is not valid. Settign it to the default of {}".format(iMaxTokens,iDefMaxToken))
+    iMaxTokens = iDefMaxToken
+  else:
+     iMaxTokens = int(iMaxTokens)
+
 
   if not strAccountName and strAuthMethod == "1pa":
      LogEntry("Auth method is 1Password but 1Password account name not specified, can't proceed",0,True)
@@ -1258,6 +1261,9 @@ def main():
         if not lstCleanTags:
            lstCleanTags = dictProduct["tags"]
         dictNewDesc = GenerateProductDescription(dictProduct["name"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
+        if isinstance(dictNewDesc,dict):
+           LogEntry("New Description is not a dict, something went wrong with AI generation, "
+                    "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
         strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
         strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
         strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
