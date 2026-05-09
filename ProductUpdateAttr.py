@@ -60,6 +60,31 @@ sentry_sdk.init(
 
 # sub defs
 
+def GenerateProductDescription(strDetails,strSystem, objClient, strModel, iMaxToken):
+  """
+  Create a WooCommerce compatible product details using the REST API.
+  Parameters:
+  strDetails (str): A string with details about the product, such make, model and other relevant facts
+  strSystem (str): The system prompt text
+  objClient: The object from SDK when the client was created.
+  strModel: A string representing the model to use
+  iMaxToken: Integer for the Max token variable
+
+  Returns: A dictionary object with the respone
+  """
+
+  dictMessage = {}
+  dictMessage["role"] = "user"
+  dictMessage["content"] = "Using the following details please generate product description: {}".format(strDetails)
+  dictSystemPrompt = {}
+  dictSystemPrompt["type"] = "text"
+  dictSystemPrompt["text"] = strSystem
+  dictSystemPrompt["cache_control"] = {"type": "ephemeral"}
+
+  objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+
+
+
 def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     """
     Create a new WooCommerce product using the REST API.
@@ -329,6 +354,42 @@ def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strW
 
     LogEntry("Successfully updated product ID: {}".format(iProductID), 2)
     return dictResponse
+
+def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
+  LogEntry("Loading values from {}".format(strEndPoint))
+  dictHeader = {}
+  strMethod = "get"
+  dictGeneric = {}
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+  LogEntry("API call successful, processing response. "
+             "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
+
+  for dictEntry in dictResponse[1]:
+    dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
+
+  iPage = 2
+  if len(dictResponse[1]) < iTotal:
+    while len(dictResponse[1])  > 0:
+      LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
+      dictParams["page"] = iPage
+      strParams = urlparse.urlencode(dictParams)
+      strURL = strBaseURL + strEndPoint + "?" + strParams
+      dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+      if dictResponse[0]["Success"]==False:
+        LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+      LogEntry("API call successful, processing response. "
+                "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
+      for dictEntry in dictResponse[1]:
+        dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
+      iPage += 1
+
+
+  return dictGeneric
 
 def GetEnvCreds(dictCollectionIn):
     """
@@ -732,41 +793,6 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
-  LogEntry("Loading values from {}".format(strEndPoint))
-  dictHeader = {}
-  strMethod = "get"
-  dictGeneric = {}
-  dictParams = {}
-  dictParams["per_page"] = iPerPage
-  strURL = strBaseURL + strEndPoint
-  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-  if dictResponse[0]["Success"]==False:
-    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
-  LogEntry("API call successful, processing response. "
-             "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
-
-  for dictEntry in dictResponse[1]:
-    dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
-
-  iPage = 2
-  if len(dictResponse[1]) < iTotal:
-    while len(dictResponse[1])  > 0:
-      LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
-      dictParams["page"] = iPage
-      strParams = urlparse.urlencode(dictParams)
-      strURL = strBaseURL + strEndPoint + "?" + strParams
-      dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
-      if dictResponse[0]["Success"]==False:
-        LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
-      LogEntry("API call successful, processing response. "
-                "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
-      for dictEntry in dictResponse[1]:
-        dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
-      iPage += 1
-
-
-  return dictGeneric
 
 def main():
   global str1PassToken
@@ -782,11 +808,16 @@ def main():
   global dictGlobalTags
   global dictGlobalBrands
   global iPerPage
-  global objAIclient
+  global objAIClient
+ # global strAIsystem
+
 
   dictProxies = {}
   strOutDir = None
   objFileOut = None
+  objAIClient = None
+  #strAIsystem = ""
+
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
@@ -1100,8 +1131,12 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
 
-  LogEntry("Successfully retrieved credentials from {}. "
-           "Now loading various lists from WooCommerce to prepare for product updates.".format(strCredMethod))
+  LogEntry("Successfully retrieved credentials from {}. ".format(strCredMethod))
+  if strAction == "IMPORT" or strAction == "FIX":
+    LogEntry("Establish a connection to Anthropic API")
+    objAIClient = Anthropic(api_key=strAIAPIKey)
+
+  LogEntry("Now loading various lists from WooCommerce to prepare for product updates.")
   dictHeader = {}
   strMethod = "get"
   dictGlobalAttributes = LoadDictionaries("/wp-json/wc/v3/products/attributes", strBaseURL, strWCKey, strWCSecret)
