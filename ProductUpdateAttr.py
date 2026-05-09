@@ -60,7 +60,7 @@ sentry_sdk.init(
 
 # sub defs
 
-def GenerateProductDescription(strDetails,strSystem, objClient, strModel, iMaxToken):
+def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strModel:str, iMaxToken:int)->dict:
   """
   Create a WooCommerce compatible product details using the REST API.
   Parameters:
@@ -83,8 +83,6 @@ def GenerateProductDescription(strDetails,strSystem, objClient, strModel, iMaxTo
 
   objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
 
-
-
 def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     """
     Create a new WooCommerce product using the REST API.
@@ -105,7 +103,8 @@ def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     LogEntry("Creating WooCommerce product SKU: {}".format(dictProduct.get("sku")))
     return MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
 
-def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecret, strDelim=","):
+def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:str, strWCSecret:str,
+                                     strAIsystem:str, objAIClient:any,strAIModel:str,iMaxTokens:int, strDelim:str=",")->list:
     """
     Read a CSV file with columns:
     Brand, sku, EAN/GTIN, Name, Descr, Price, Cost, Stock, Allow Backorder, Enable Reviews
@@ -116,6 +115,10 @@ def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecr
     strBaseURL (str): The base URL of the WooCommerce site (e.g., "https://example.com")
     strWCKey (str): WooCommerce API consumer key
     strWCSecret (str): WooCommerce API consumer secret
+    strAISystem (str): Text to pass to the AI with background instructions
+    objAIclient: the output from anthropic client create
+    strAIModel(str): String representing the model to use
+    iMaxtokens(int): Integer limiting how many tokens each call uses
     strDelim (str): The strDelim used in the CSV file, defaults to comma (",")
 
     Returns:
@@ -123,7 +126,6 @@ def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecr
     API response is a tuple of the form ({"Success": True/False}, response_data)
     """
     lstResults = []
-    # TODO: Need a function that sends all the details over Claude for full product descr
 
     with open(strCSVPath, mode="r", newline="", encoding="utf-8-sig") as objCSVFile:
         objCSVReader = csv.DictReader(objCSVFile, delimiter=strDelim)
@@ -133,6 +135,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecr
                 LogEntry("Skipping objRow with missing SKU")
                 continue
 
+            strProdName = (objRow.get("Name") or "").strip()
             strDescr = (objRow.get("Descr") or "").strip()
             strBackorders = objRow.get("Allow Backorder", "")
             if not strBackorders:
@@ -155,12 +158,15 @@ def CreateWooCommerceProductsFromCSV(strCSVPath, strBaseURL, strWCKey, strWCSecr
               else:
                 lstBrandID = []
 
+            strProdDetails = "{} {} {} {}".format(strProdName,strDescr, strBrand, strSKU)
+            dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
+
             dictProduct = {}
-            dictProduct["name"] = (objRow.get("Name") or "").strip()
+            dictProduct["name"] = dictResult["Product_Name"]
             dictProduct["type"] = "simple"
             dictProduct["sku"] = strSKU
-            dictProduct["description"] = strDescr
-            dictProduct["short_description"] = strDescr
+            dictProduct["description"] = dictResult["description"]
+            dictProduct["short_description"] = dictResult["short_description"]
             dictProduct["backorders"] = strBackorders
             dictProduct["regular_price"] = strPrice if strPrice else None
             dictProduct["reviews_allowed"] = bAllowReviews
@@ -793,7 +799,6 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-
 def main():
   global str1PassToken
   global bQuiet
@@ -808,15 +813,13 @@ def main():
   global dictGlobalTags
   global dictGlobalBrands
   global iPerPage
-  global objAIClient
- # global strAIsystem
-
 
   dictProxies = {}
   strOutDir = None
   objFileOut = None
-  objAIClient = None
-  #strAIsystem = ""
+
+  strDefAImodel = "claude-sonnet-4-6"
+  iDefMaxToken = 512
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
@@ -955,6 +958,14 @@ def main():
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
       strDefOutDir = strBaseDir + "Output/"
+    if "MaxTokens" in objConfig["Generic"]:
+       iMaxTokens = objConfig["Generic"]["MaxTokens"]
+    else:
+       iMaxTokens = None
+    if "AIModel" in objConfig["Generic"]:
+       strAIModel = objConfig["Generic"]["AIModel"]
+    else:
+       strAIModel = strDefAImodel
     if "ImportFile" in objConfig["Generic"]:
       strImportFile = objConfig["Generic"]["ImportFile"]
     else:
@@ -1072,6 +1083,9 @@ def main():
       objAttrEqFileHndl.close()
     else:
       LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile))
+  if not isInt(iMaxTokens):
+     LogEntry("MaxToken value of '{}' is not valid. Settign it to the default of {}".format(iMaxTokens,iDefMaxToken))
+     iMaxTokens = iDefMaxToken
 
   str1PassToken = FetchEnv("TOKEN")
   if not str1PassToken:
@@ -1135,6 +1149,8 @@ def main():
   if strAction == "IMPORT" or strAction == "FIX":
     LogEntry("Establish a connection to Anthropic API")
     objAIClient = Anthropic(api_key=strAIAPIKey)
+  else:
+     objAIClient = None
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.")
   dictHeader = {}
@@ -1148,7 +1164,7 @@ def main():
     # The Import action takes place here
     if strImportFile is not None:
       if os.path.isfile(strImportFile):
-        lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,",")
+        lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,strAIsystem,objAIClient,strAIModel,iMaxTokens,",")
         LogEntry("Finished import, here are the results:\n{}".format(lstResults))
       else:
          LogEntry("Import File {} not found, can't do anything".format(strImportFile))
@@ -1231,14 +1247,15 @@ def main():
       if strAction == "FIX":
         # TODO: Send product description to Claude to rewrite Name, Short Description and Long Description
 
-        LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
+        #LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
 
-        #dictNewDesc = FixProductDescription(dictProduct["description"])
-        #strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
-        #strNewName = dictNewDesc["name"] if "name" in dictNewDesc else dictProduct["name"]
-        #strShortDesc = dictNewDesc["short_descr"] if "short_descr" in dictNewDesc else dictProduct["short_description"]
-        #dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
-        #  "short_description": strShortDesc},dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+
+        dictNewDesc = GenerateProductDescription(dictProduct["description"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
+        strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
+        strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
+        strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
+        dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
+          "short_description": strShortDesc},dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
 
       if strAction == "UPDATE":
         # Here is the reall UPDATE work going on. Finding tech specs in description and apply it as an attribute
