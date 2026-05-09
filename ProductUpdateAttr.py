@@ -372,6 +372,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+    return{}
   LogEntry("API call successful, processing response. "
              "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
 
@@ -1156,6 +1157,8 @@ def main():
   dictHeader = {}
   strMethod = "get"
   dictGlobalAttributes = LoadDictionaries("/wp-json/wc/v3/products/attributes", strBaseURL, strWCKey, strWCSecret)
+  if not dictGlobalAttributes:
+     LogEntry("No attributes, aborting",0,True)
   dictGlobalCategories = LoadDictionaries("/wp-json/wc/v3/products/categories", strBaseURL, strWCKey, strWCSecret)
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
