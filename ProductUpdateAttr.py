@@ -17,8 +17,10 @@ pip install anthropic
 '''
 # Import libraries
 import os
+import re
 import time
 import sys
+import json
 from unittest import result
 import requests
 import sentry_sdk
@@ -82,6 +84,8 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   dictSystemPrompt["cache_control"] = {"type": "ephemeral"}
 
   objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens))
+  return ParseJsonResponse(objMessage.content[0].text)
 
 def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     """
@@ -611,6 +615,11 @@ def GetSpecificationsFollower(strHTML):
     except Exception as e:
         LogEntry(f"Error parsing HTML in GetSpecificationsFollower: {e}", 3)
         return "error"
+
+def ParseJsonResponse(strText: str) -> dict:
+    strCleaned = re.sub(r"^```(?:json)?\n?", "", strText.strip())
+    strCleaned = re.sub(r"\n?```$", "", strCleaned).strip()
+    return json.loads(strCleaned)
 
 def GetFileHandle(strFileName, strperm):
     """
@@ -1261,7 +1270,7 @@ def main():
         if not lstCleanTags:
            lstCleanTags = dictProduct["tags"]
         dictNewDesc = GenerateProductDescription(dictProduct["name"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
-        if isinstance(dictNewDesc,dict):
+        if not isinstance(dictNewDesc,dict):
            LogEntry("New Description is not a dict, something went wrong with AI generation, "
                     "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
         strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]

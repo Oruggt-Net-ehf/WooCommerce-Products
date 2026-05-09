@@ -18,4 +18,4 @@ Always respond with valid JSON in exactly this structure, nothing else:
   "SEO_title": "Text Only, SEO Title 50-60 characters"
   "Product_Name": "Descriptive SEO friendly name in 50-75 characters"
 }
-No preamble, no markdown fences, just the JSON object.
+Respond with raw JSON only. No markdown, no code fences, no preamble, no explanation.
