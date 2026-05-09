@@ -12,6 +12,7 @@ pip install argparse
 pip install onepassword-sdk
 pip install asyncio
 pip install beautifulsoup4
+pip install anthropic
 
 '''
 # Import libraries
@@ -28,6 +29,8 @@ from onepassword import Client, DesktopAuth
 import asyncio
 import platform
 from bs4 import BeautifulSoup
+from anthropic import Anthropic
+
 
 if sys.version_info[0] > 2:
     import urllib.parse as urlparse
@@ -45,6 +48,7 @@ tLastCall = 0
 iTotalSleep = 0
 iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 2  # Minimum time in seconds between API calls
+strDefAIenvName = "ANTHROPIC_API_KEY"
 strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
 
 sentry_sdk.init(
@@ -765,7 +769,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
   return dictGeneric
 
 def main():
-  global strToken
+  global str1PassToken
   global bQuiet
   global objLogOut
   global iVerbose
@@ -778,6 +782,7 @@ def main():
   global dictGlobalTags
   global dictGlobalBrands
   global iPerPage
+  global objAIclient
 
   dictProxies = {}
   strOutDir = None
@@ -844,7 +849,8 @@ def main():
   bFix = objArgs.fix
 
   LogEntry("This is a script to parse WooCommerce product description for specifications "
-           "and create product attributes from it."
+           "and create product attributes from it. Can also import new products "
+           "and rewrite product descriptions"
           "This is running under Python Version {}".format(strVersion))
   LogEntry("Running from: {}".format(strRealPath))
   dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
@@ -909,6 +915,11 @@ def main():
     else:
       LogEntry("AuthMethod not found in config, defaulting to '1Password'.")
       strAuthMethod = "1pa"
+    if strAuthMethod == "1pa":
+      if "AccountName" in objConfig["Generic"]:
+        strAccountName = objConfig["Generic"]["AccountName"]
+      else:
+        LogEntry("Account name not found in config")
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -917,6 +928,10 @@ def main():
       strImportFile = objConfig["Generic"]["ImportFile"]
     else:
        strImportFile = None
+    if "AIBackgroundFile" in objConfig["Generic"]:
+       strAIsystemFile = objConfig["Generic"]["AIBackgroundFile"]
+    else:
+       strAIsystemFile = None
     if "FileTimeStampFormat" in objConfig["Generic"]:
       strTimeStampFormat = objConfig["Generic"]["FileTimeStampFormat"]
     else:
@@ -953,12 +968,31 @@ def main():
         iPerPage = 25
   else:
     LogEntry("section Generic not found in config")
-  if "WPCreds" in objConfig:
+
+  if "AICreds" in objConfig:
     if strAuthMethod == "1pa":
-      if "AccountName" in objConfig["WPCreds"]:
-        strAccountName = objConfig["WPCreds"]["AccountName"]
+      if "AccountName" in objConfig["AICreds"]:
+        strAccountName = objConfig["AICreds"]["AccountName"]
       else:
         LogEntry("Account name not found in config")
+      if "VaultID" in objConfig["AICreds"]:
+        strAIVaultID = objConfig["AICreds"]["VaultID"]
+      else:
+        LogEntry("VaultID not found in config")
+      if "ItemID" in objConfig["AICreds"]:
+        strAIItemID = objConfig["AICreds"]["ItemID"]
+      else:
+        LogEntry("ItemID not found in config")
+    if "APIKey" in objConfig["AICreds"]:
+      strAIAPIKeyField = objConfig["AICreds"]["APIKey"]
+    else:
+      LogEntry("APIKey not found in config, setting default to {}".format(strDefAIenvName))
+      strAIAPIKeyField = strDefAIenvName
+  else:
+    LogEntry("section AICreds not found in config")
+
+  if "WPCreds" in objConfig:
+    if strAuthMethod == "1pa":
       if "VaultID" in objConfig["WPCreds"]:
         strVaultID = objConfig["WPCreds"]["VaultID"]
       else:
@@ -982,6 +1016,19 @@ def main():
   else:
     LogEntry("section WPCreds not found in config")
 
+  if strAIsystemFile is None:
+    LogEntry("Please provide a path to a text file providing context for AI Calls. "
+              "Put it in the general section of the config file as 'AIBackgroundFile = system.txt' "
+              "assuming the file is called system.txt and is in the script directory.",0,True)
+  else:
+    if os.path.isfile(strAIsystemFile):
+      LogEntry("AI System file appears good")
+      objAISystem = GetFileHandle(strAIsystemFile,"r")
+      strAIsystem = objAISystem.read()
+      objAISystem.close()
+    else:
+      LogEntry("AI system file {} specified but not found, please correct before proceeding.".format(strAttrEqFile),0,True)
+
   if strAttrEqFile is not None:
     if os.path.isfile(strAttrEqFile):
       LogEntry("Attribute equivalence file {} found, processing.".format(strAttrEqFile))
@@ -995,9 +1042,9 @@ def main():
     else:
       LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile))
 
-  strToken = FetchEnv("TOKEN")
-  if not strToken:
-    strToken = None
+  str1PassToken = FetchEnv("TOKEN")
+  if not str1PassToken:
+    str1PassToken = None
 
   strOutDir = objArgs.outdir if objArgs.outdir else strDefOutDir
   strOutDir = strOutDir.replace("\\", "/")
@@ -1015,16 +1062,20 @@ def main():
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strVaultID
     dictItemSpecs["item_id"] = strItemID
-    dictItemCollection["Creds"] = dictItemSpecs
+    dictItemCollection["WCreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemSpecs["vault_id"] = strAIVaultID
+    dictItemSpecs["item_id"] = strAIItemID
+    dictItemCollection["AICreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
-      strAccountName, "provided" if strToken else "not provided"))
+      strAccountName, "provided" if str1PassToken else "not provided"))
 
-    returned_dict = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=strToken))
-    if returned_dict is None:
+    dictReturn = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=str1PassToken))
+    if dictReturn is None:
       LogEntry("Failed to retrieve item.",0,True)
-    if "fatal error" in returned_dict:
-      LogEntry("Fatal 1pass error: {}".format(returned_dict['fatal error']['error message']),0,True)
+    if "fatal error" in dictReturn:
+      LogEntry("Fatal 1pass error: {}".format(dictReturn['fatal error']['error message']),0,True)
   elif strAuthMethod == "env":
     strCredMethod = "Environment Variables"
     LogEntry("Using environment variable authentication method. Fetching credentials from environment variables.")
@@ -1033,15 +1084,18 @@ def main():
     dictItemSpecs["BaseURLField"] = strBaseURLField
     dictItemSpecs["ConsumerKeyField"] = strConsumerKeyField
     dictItemSpecs["ConsumerSecretField"] = strConsumerSecretField
-    dictItemCollection["Creds"] = dictItemSpecs
+    dictItemCollection["WCreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemCollection["AICreds"] = dictItemSpecs
 
-    returned_dict = GetEnvCreds(dictItemCollection)
-    if not returned_dict or "Creds" not in returned_dict:
+    dictReturn = GetEnvCreds(dictItemCollection)
+    if not dictReturn or "WCreds" not in dictReturn:
       LogEntry("Failed to retrieve credentials from environment variables.",0,True)
 
-  strBaseURL = returned_dict["Creds"][strBaseURLField]
-  strWCKey = returned_dict["Creds"][strConsumerKeyField]
-  strWCSecret = returned_dict["Creds"][strConsumerSecretField]
+  strBaseURL = dictReturn["WCreds"][strBaseURLField]
+  strWCKey = dictReturn["WCreds"][strConsumerKeyField]
+  strWCSecret = dictReturn["WCreds"][strConsumerSecretField]
+  strAIAPIKey = dictReturn["AICreds"][strAIAPIKeyField]
 
   if not strBaseURL or not strWCKey or not strWCSecret:
       LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
