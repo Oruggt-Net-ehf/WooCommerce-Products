@@ -817,6 +817,7 @@ def main():
   dictProxies = {}
   strOutDir = None
   objFileOut = None
+  strAccountName = None
 
   strDefAImodel = "claude-sonnet-4-6"
   iDefMaxToken = 512
@@ -950,8 +951,8 @@ def main():
       LogEntry("AuthMethod not found in config, defaulting to '1Password'.")
       strAuthMethod = "1pa"
     if strAuthMethod == "1pa":
-      if "AccountName" in objConfig["Generic"]:
-        strAccountName = objConfig["Generic"]["AccountName"]
+      if "1PassAccount" in objConfig["Generic"]:
+        strAccountName = objConfig["Generic"]["1PassAccount"]
       else:
         LogEntry("Account name not found in config")
     if "OutDir" in objConfig["Generic"]:
@@ -1013,10 +1014,6 @@ def main():
 
   if "AICreds" in objConfig:
     if strAuthMethod == "1pa":
-      if "AccountName" in objConfig["AICreds"]:
-        strAccountName = objConfig["AICreds"]["AccountName"]
-      else:
-        LogEntry("Account name not found in config")
       if "VaultID" in objConfig["AICreds"]:
         strAIVaultID = objConfig["AICreds"]["VaultID"]
       else:
@@ -1086,6 +1083,9 @@ def main():
   if not isInt(iMaxTokens):
      LogEntry("MaxToken value of '{}' is not valid. Settign it to the default of {}".format(iMaxTokens,iDefMaxToken))
      iMaxTokens = iDefMaxToken
+
+  if not strAccountName and strAuthMethod == "1pa":
+     LogEntry("Auth method is 1Password but 1Password account name not specified, can't proceed",0,True)
 
   str1PassToken = FetchEnv("TOKEN")
   if not str1PassToken:
