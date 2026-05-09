@@ -1248,17 +1248,21 @@ def main():
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)))
       if strAction == "FIX":
-        # TODO: Send product description to Claude to rewrite Name, Short Description and Long Description
-
-        #LogEntry("FIX action is not implemented yet, skipping update for product {}.".format(dictProduct["id"]))
-
-
-        dictNewDesc = GenerateProductDescription(dictProduct["description"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
+        # Actual fix action
+        lstCleanTags = []
+        if strFixTag and isinstance(strFixTag,str):
+          lstCurTags = dictProduct["tags"]
+          for dictTag in lstCurTags:
+            if dictTag["name"].lower() != strFixTag.lower():
+                lstCleanTags.append(dictTag)
+        if not lstCleanTags:
+           lstCleanTags = dictProduct["tags"]
+        dictNewDesc = GenerateProductDescription(dictProduct["name"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
         strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
         strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
         strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
         dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
-          "short_description": strShortDesc},dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+          "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
 
       if strAction == "UPDATE":
         # Here is the reall UPDATE work going on. Finding tech specs in description and apply it as an attribute
@@ -1288,12 +1292,16 @@ def main():
               continue
             LogEntry("Attribute {} is not on product, or is local. Need to add {} to attributeID {} ".format(
               strKey, lstValue, iAttrID))
-            lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": lstValue})
+
+            bVariation = False
             if isinstance(AttrFound,dict):
-               if AttrFound["variation"]:
-                  LogEntry("WARNING!! Converted attribute {} used for variation from local to global. "
+              if AttrFound["variation"]:
+                LogEntry("WARNING!! Converted attribute {} used for variation from local to global. "
                            "ID:{} SKU:{} Name:{}".format(strKey, dictProduct["id"], dictProduct["sku"], dictProduct["name"]))
-               lstProdAttribs.remove(AttrFound)
+              lstProdAttribs.remove(AttrFound)
+              bVariation = AttrFound["variation"]
+
+            lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": bVariation, "options": lstValue})
             bNeedUpdate = True
 
         if bNeedUpdate:
