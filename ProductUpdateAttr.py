@@ -21,31 +21,22 @@ import re
 import time
 import sys
 import json
-from unittest import result
 import requests
 import sentry_sdk
 import argparse
 import configparser
 import csv
-from onepassword import Client, DesktopAuth
 import asyncio
 import platform
+from onepassword import Client, DesktopAuth
+from urllib.parse import urlparse, urlunparse
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
-
-
-if sys.version_info[0] > 2:
-    import urllib.parse as urlparse
-    # The following line surpresses a warning that we aren't validating the HTTPS certificate
-    requests.urllib3.disable_warnings()
-    from bs4 import BeautifulSoup
-else:
-   print("This script is only supported on python 3")
-   sys.exit(9)
 
 # End imports
 
 # Few globals
+requests.urllib3.disable_warnings()
 tLastCall = 0
 iTotalSleep = 0
 iTimeOut = 180  # Max time in seconds to wait for network response
@@ -640,6 +631,27 @@ def ParseJsonResponse(strText: str) -> dict:
     strCleaned = re.sub(r"\n?```$", "", strCleaned).strip()
     return json.loads(strCleaned)
 
+def NormalizeToHttps(strURL: str) -> str | None:
+    parsedURL = urlparse(strURL)
+
+    # Already HTTPS
+    if parsedURL.scheme == "https" and parsedURL.netloc:
+        return strURL
+
+    # Upgrade HTTP → HTTPS
+    if parsedURL.scheme == "http" and parsedURL.netloc:
+        return urlunparse(parsedURL._replace(scheme="https"))
+
+    # Bare FQDN → prepend https://
+    if not parsedURL.scheme and IsFqdn(strURL):
+        return "https://{}".format(strURL)
+
+    return None
+
+def IsFqdn(strHost: str) -> bool:
+    strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+    return bool(re.match(strPattern, strHost))
+
 def GetFileHandle(strFileName, strperm):
     """
     This wraps error handling around standard file open function
@@ -721,6 +733,7 @@ def Convert2OpenMetricGauge(dictPayloads):
 
 def SubmitMetric(dictPayload:dict,strURL:str,strToken:str):
   strMethod = "post"
+  strURL = strURL + "/metrics"
 
   LogEntry("Submitting metric to server:{}".format(json.dumps(dictPayload)),3)
   dictHeader = {}
@@ -1231,8 +1244,14 @@ def main():
   if not strAIAPIKey:
     LogEntry("No AI API key provided, won't be able to use AI",0)
   if strMetricURL and not strMetricToken:
-     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
-     strMetricURL = None
+    LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
+    strMetricURL = None
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),3)
+  strMetricURL = NormalizeToHttps(strMetricURL)
+  strBaseURL = NormalizeToHttps(strBaseURL)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),3)
+  if not strBaseURL:
+     LogEntry("Invalid BaseURL, unable to continue",0,True)
 
   LogEntry("Unless otherwise noted above, successfully retrieved credentials from {}. ".format(strCredMethod),1)
   if strAction == "IMPORT" or strAction == "FIX":
