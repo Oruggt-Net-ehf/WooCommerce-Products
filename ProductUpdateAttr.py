@@ -163,7 +163,9 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             strBrand = objRow.get("Brand", "").strip()
             if strBrand in dictGlobalBrands:
               lstBrandID = [int(dictGlobalBrands[strBrand])]
+              LogEntry("Brand {} has ID of {}".format(strBrand,lstBrandID))
             else:
+              LogEntry("Brand {} can't be found, attempting to create it")
               iBrandID = CreateBrand(strBrand, strBaseURL, strWCKey, strWCSecret)
               if iBrandID is not None:
                 dictGlobalBrands[strBrand] = int(iBrandID)
@@ -171,7 +173,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
               else:
                 lstBrandID = []
 
-            strProdDetails = "{} {} {} {}".format(strProdName,strDescr, strBrand, strSKU)
+            strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
             dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
             dictProduct = {}
@@ -944,7 +946,7 @@ def main():
 
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
-           "and rewrite product descriptions"
+           "and rewrite product descriptions.\n"
           "This is running under Python Version {}".format(strVersion))
   LogEntry("Running from: {}".format(strRealPath))
   dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
