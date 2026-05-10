@@ -24,7 +24,6 @@ pip install beautifulsoup4
 
 pip install anthropic
 
-
 ## CLI Explained
 
 usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]
