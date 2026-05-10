@@ -1,5 +1,5 @@
 [Generic]
-AuthMethod = 1Password
+AuthMethod = env
 1PassAccount = Your Account name
 FileTimeStampFormat = %%Y-%%m-%%d-%%H-%%M-%%S
 TimeStampAudit = false
@@ -22,14 +22,10 @@ AttrEqFile = AttrEq.csv
 #Filter = sku:E62iUGS-2axD5axT
 
 [WPCreds]
-VaultID = 1Password VaultID
-ItemID = 1Password ItemID
-ConsumerKeyField = username
-ConsumerSecretField = credential
-BaseURLField = hostname
+ConsumerKeyField = KEY
+ConsumerSecretField = SECRET
+BaseURLField = BASEURL
 
 [AICreds]
-VaultID = 1Password VaultID
-ItemID = 1Password ItemID
-APIKeyField = credential
-MetricTokenField = MetricToken
+APIKeyField = ANTHROPIC_API_KEY
+MetricTokenField = BS_TOKEN
