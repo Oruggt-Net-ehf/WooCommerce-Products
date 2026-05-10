@@ -2,21 +2,28 @@
 
 ## Introductions
 
-Script that analyzes product description in WooCommerce and turns a spec list into attributes
-Additionally it can use Anthropic API to rewrite product descriptions
-or create new products from a CSV import file using Antropic AI to generate descriptions.
+Script that analyzes product description in WooCommerce and turns a spec list into attributes.
+Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Antropic AI to generate descriptions.
 
 Author Siggi Bjarnason 21 April 2026
 Copyright 2026 Siggi Bjarnason
 
 Following packages need to be installed
+
 pip install requests
+
 pip install sentry_sdk
+
 pip install argparse
+
 pip install onepassword-sdk
+
 pip install asyncio
+
 pip install beautifulsoup4
+
 pip install anthropic
+
 
 ## CLI Explained
 
