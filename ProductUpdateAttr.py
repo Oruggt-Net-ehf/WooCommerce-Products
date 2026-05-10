@@ -28,8 +28,8 @@ import configparser
 import csv
 import asyncio
 import platform
+import urllib.parse as urlLib
 from onepassword import Client, DesktopAuth
-from urllib.parse import urlparse, urlunparse
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
 
@@ -398,7 +398,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
     while len(dictResponse[1])  > 0:
       LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),2)
       dictParams["page"] = iPage
-      strParams = urlparse.urlencode(dictParams)
+      strParams = urlLib.urlencode(dictParams)
       strURL = strBaseURL + strEndPoint + "?" + strParams
       dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
       if dictResponse[0]["Success"]==False:
@@ -632,7 +632,7 @@ def ParseJsonResponse(strText: str) -> dict:
     return json.loads(strCleaned)
 
 def NormalizeToHttps(strURL: str) -> str | None:
-    parsedURL = urlparse(strURL)
+    parsedURL = urlLib.urlparse(strURL)
 
     # Already HTTPS
     if parsedURL.scheme == "https" and parsedURL.netloc:
@@ -640,7 +640,7 @@ def NormalizeToHttps(strURL: str) -> str | None:
 
     # Upgrade HTTP → HTTPS
     if parsedURL.scheme == "http" and parsedURL.netloc:
-        return urlunparse(parsedURL._replace(scheme="https"))
+        return urlLib.urlunparse(parsedURL._replace(scheme="https"))
 
     # Bare FQDN → prepend https://
     if not parsedURL.scheme and IsFqdn(strURL):
@@ -1246,10 +1246,10 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),3)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),2)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),3)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),2)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
 
@@ -1344,7 +1344,7 @@ def main():
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
-    strParams = urlparse.urlencode(dictParams)
+    strParams = urlLib.urlencode(dictParams)
     strURL = strBaseURL + strEndPoint + "?" + strParams
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
