@@ -1336,7 +1336,7 @@ def main():
      for lstFilter in lstFilters:
         if ":" in lstFilter:
            strFilterKey, strFilterValue = lstFilter.split(":", 1)
-           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),1)
+           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
            dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
      dictParams["status"] = "publish"
