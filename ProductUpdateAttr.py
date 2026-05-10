@@ -907,8 +907,8 @@ def main():
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
-                                      "Must specify one Action directive. If no config file is specified, "
-                                      "it will look for {} in the same directory as the script.".format(strDefConf))
+                                      "If no config file is specified, it will look for {} in the same directory as the script. "
+                                      "Requires one and only one Action directive. If omitted the script prompts for it.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
                       action="store_true", help="only output to file, not to screen")
   objParser.add_argument("--audit", dest="audit",

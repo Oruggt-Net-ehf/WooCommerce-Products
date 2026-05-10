@@ -22,19 +22,19 @@ pip install anthropic
 
 `usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
 
-WooCommerce Product description parser and attrib creator. Must specify one Action directive. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script.
+WooCommerce Product description parser and attrib creator. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
 
 `options:\`
   `-h, --help`           show this help message and exit\
   `--silent`             only output to file, not to screen\
-  `--audit`              Action directive. Only audit products and attributes, no updates.\
+  `--audit`              Action directive. Only audit products and attributes, no updates. Prints out the product name & sku along with how many attributes it has and how many attributes are in text. No overlap information available.\
   `--update`             Action directive. Update all products with attributes parsed from description. Required unless you specify another action, only one action can be specified.\
-  `--import`             Action directive. Create new products based on import file.Required unless you specify another action, only one action can be specified.\
-  `--fix`                Action directive. Fix product descriptions.Required unless you specify another action, only one action can be specified.\
-  `-c, --config CONFIG`  Path to the configuration file\
+  `--import`             Action directive. Create new products based on import file. Required unless you specify another action, only one action can be specified.\
+  `--fix`                Action directive. Fix product descriptions by passing existing product name to Claude and asking for new descriptions. Required unless you specify another action, only one action can be specified.\
+  `-c, --config CONFIG`  Path to the configuration file. Optional. Defaults to ProductUpdateAttr.ini in the same directory as the script.\
   `-v, --verbosity`      Verbose output, vv level 2 vvvv level 4\
-  `-x, --proxy PROXY`    Proxy to use for API calls\
-  `-o, --outdir OUTDIR`  Output directory for generated files\
+  `-x, --proxy PROXY`    Proxy to use for API calls. Optional\
+  `-o, --outdir OUTDIR`  Output directory for generated files. Optional. Defaults to folder named output in the script directory\
 
 ## Configuration file explained
 
