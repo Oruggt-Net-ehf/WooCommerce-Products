@@ -52,6 +52,7 @@ iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 10  # Minimum time in seconds between API calls
 strDefAIenvName = "ANTHROPIC_API_KEY"
 iDefMaxToken = 2048
+iDefPerPage = 25
 strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
 
 sentry_sdk.init(
@@ -91,9 +92,9 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
     dictPayload["output_tokens"] = objMessage.usage.output_tokens
     lstMetrics = Convert2OpenMetricGauge(dictPayload)
     WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken)
-    LogEntry("Response from metric server: {}".format(WebResponse))
+    LogEntry("Response from metric server: {}".format(WebResponse),3)
 
-  LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens))
+  LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
 
 def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
@@ -113,7 +114,7 @@ def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     strEndPoint = "/wp-json/wc/v3/products"
     strURL = strBaseURL + strEndPoint
 
-    LogEntry("Creating WooCommerce product SKU: {}".format(dictProduct.get("sku")))
+    LogEntry("Creating WooCommerce product SKU: {}".format(dictProduct.get("sku")),2)
     return MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
 
 def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:str, strWCSecret:str,
@@ -145,7 +146,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         for objRow in objCSVReader:
             strSKU = (objRow.get("sku") or objRow.get("SKU") or "").strip()
             if not strSKU:
-                LogEntry("Skipping objRow with missing SKU")
+                LogEntry("Skipping objRow with missing SKU",0)
                 continue
 
             strProdName = (objRow.get("Name") or "").strip()
@@ -160,16 +161,22 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             strQTY = objRow.get("Stock", "").strip()
             strPrice = objRow.get("Price", "").strip()
             strGTIN = objRow.get("EAN/GTIN", "").strip()
-            strBrand = objRow.get("Brand", "").strip()
-            if strBrand.lower() in dictGlobalBrands:
-              lstBrandID = [int(dictGlobalBrands[strBrand])]
-              LogEntry("Brand {} has ID of {}".format(strBrand,lstBrandID))
+            strBrand_asis = objRow.get("Brand", "").strip()
+            strBrand = objRow.get("Brand", "").strip().lower()
+            if strBrand in dictGlobalBrands:
+              dictBrandID = {}
+              dictBrandID["id"] = int(dictGlobalBrands[strBrand])
+              lstBrandID = [dictBrandID]
+              LogEntry("Brand {} has ID of {}".format(strBrand_asis,lstBrandID),3)
             else:
-              LogEntry("Brand {} can't be found, attempting to create it")
-              iBrandID = CreateBrand(strBrand, strBaseURL, strWCKey, strWCSecret)
+              LogEntry("Brand {} can't be found, attempting to create it".format(strBrand_asis),3)
+              iBrandID = CreateBrand(strBrand_asis, strBaseURL, strWCKey, strWCSecret)
+              LogEntry("Brand {} now exists as {}".format(strBrand_asis,iBrandID),3)
               if iBrandID is not None:
                 dictGlobalBrands[strBrand] = int(iBrandID)
-                lstBrandID = [iBrandID]
+                dictBrandID = {}
+                dictBrandID["id"] = iBrandID
+                lstBrandID = [dictBrandID]
               else:
                 lstBrandID = []
 
@@ -253,7 +260,7 @@ def AttributeExists(listAttributeCollection, strSearchName):
       if isinstance(dictAttribute, dict) and "name" in dictAttribute:
         if dictAttribute["name"].strip().lower() == strSearchLower:
           if dictAttribute["id"] == 0:
-            LogEntry("Attribute {} is local".format(strSearchName))
+            LogEntry("Attribute {} is local".format(strSearchName),2)
             return dictAttribute
           else:
             return "global"
@@ -378,7 +385,7 @@ def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strW
     return dictResponse
 
 def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
-  LogEntry("Loading values from {}".format(strEndPoint))
+  LogEntry("Loading values from {}".format(strEndPoint),1)
   dictHeader = {}
   strMethod = "get"
   dictGeneric = {}
@@ -390,7 +397,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
     return{}
   LogEntry("API call successful, processing response. "
-             "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),0)
+             "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),1)
 
   for dictEntry in dictResponse[1]:
     dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
@@ -398,7 +405,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
   iPage = 2
   if len(dictResponse[1]) < iTotal:
     while len(dictResponse[1])  > 0:
-      LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
+      LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),2)
       dictParams["page"] = iPage
       strParams = urlparse.urlencode(dictParams)
       strURL = strBaseURL + strEndPoint + "?" + strParams
@@ -406,7 +413,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
       if dictResponse[0]["Success"]==False:
         LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
       LogEntry("API call successful, processing response. "
-                "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),0)
+                "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),1)
       for dictEntry in dictResponse[1]:
         dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
       iPage += 1
@@ -660,14 +667,14 @@ def GetFileHandle(strFileName, strperm):
         return objFileHndl
     except PermissionError:
         LogEntry("unable to open output file {} for {}, "
-              "permission denied.".format(strFileName, dictModes[cMode]))
+              "permission denied.".format(strFileName, dictModes[cMode]),0)
         return ("Permission denied")
     except FileNotFoundError:
         LogEntry("unable to open output file {} for {}, "
-              "Issue with the path".format(strFileName, dictModes[cMode]))
+              "Issue with the path".format(strFileName, dictModes[cMode]),0)
         return ("FileNotFound")
     except Exception as err:
-      LogEntry("Unknown error: {}".format(err))
+      LogEntry("Unknown error: {}".format(err),0)
       return ("unknowErr")
 
 def FetchEnv(strVarName):
@@ -946,10 +953,11 @@ def main():
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
            "and rewrite product descriptions.\n"
-          "This is running under Python Version {}".format(strVersion))
-  LogEntry("Running from: {}".format(strRealPath))
+          "This is running under Python Version {}".format(strVersion),0)
+  LogEntry("Running from: {}".format(strRealPath),0)
   dtNow = time.strftime("%A %d %B %Y %H:%M:%S %Z")
-  LogEntry("The script started at {}".format(dtNow))
+  LogEntry("The script started at {}".format(dtNow),0)
+  LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
   iActionCount = sum([bAudit, bUpdate, bImport, bFix])
@@ -972,7 +980,7 @@ def main():
     elif bFix:
       strAction = "FIX"
 
-  LogEntry("Selected action: {}".format(strAction))
+  LogEntry("Selected action: {}".format(strAction),0)
 
   if FetchEnv("PROXY") is not None:
     strProxy = FetchEnv("PROXY")
@@ -983,19 +991,15 @@ def main():
   if strProxy is not None:
     dictProxies["http"] = strProxy
     dictProxies["https"] = strProxy
-    LogEntry("Proxy has been configured for {}".format(strProxy))
+    LogEntry("Proxy has been configured for {}".format(strProxy),0)
   else:
-    LogEntry("No proxy has been configured")
+    LogEntry("No proxy has been configured",0)
   strConfile = objArgs.config
   if os.path.isfile(strConfile):
     LogEntry ("Configuration File {} exists".format(strConfile))
   else:
     LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
     strConfile = strDefConf
-  if os.path.isfile(strConfile):
-    LogEntry ("Configuration File {} exists".format(strConfile))
-  else:
-    LogEntry ("Can't find configuration file {}, exiting.".format(strConfile),0,True)
 
   objConFileHndl = GetFileHandle(strConfile, "r")
   objConfig = configparser.ConfigParser()
@@ -1007,16 +1011,16 @@ def main():
       strAuthMethod = objConfig["Generic"]["AuthMethod"].strip().lower()[:3]
       if strAuthMethod not in ["env", "1pa"]:
         LogEntry("Invalid AuthMethod specified in config. Must be 'env' or '1Password', "
-                 "case insensitive and only the first three characters are relevant. Defaulting to '1Password'.")
+                 "case insensitive and only the first three characters are relevant. Defaulting to '1Password'.",0)
         strAuthMethod = "1pa"
     else:
-      LogEntry("AuthMethod not found in config, defaulting to '1Password'.")
+      LogEntry("AuthMethod not found in config, defaulting to '1Password'.",0)
       strAuthMethod = "1pa"
     if strAuthMethod == "1pa":
       if "1PassAccount" in objConfig["Generic"]:
         strAccountName = objConfig["Generic"]["1PassAccount"]
       else:
-        LogEntry("Account name not found in config")
+        LogEntry("Account name not found in config",0)
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -1073,57 +1077,57 @@ def main():
       if isInt(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
       else:
-        LogEntry("PerPage value in config is not an integer, defaulting to 25")
-        iPerPage = 25
+        LogEntry("PerPage value in config is not an integer, defaulting to 25",0)
+        iPerPage = iDefPerPage
   else:
-    LogEntry("section Generic not found in config")
+    LogEntry("section Generic not found in config",0)
 
   if "AICreds" in objConfig:
     if strAuthMethod == "1pa":
       if "VaultID" in objConfig["AICreds"]:
         strAIVaultID = objConfig["AICreds"]["VaultID"]
       else:
-        LogEntry("VaultID not found in config")
+        LogEntry("VaultID not found in config",0)
       if "ItemID" in objConfig["AICreds"]:
         strAIItemID = objConfig["AICreds"]["ItemID"]
       else:
-        LogEntry("ItemID not found in config")
+        LogEntry("ItemID not found in config",0)
     if "APIKeyField" in objConfig["AICreds"]:
       strAIAPIKeyField = objConfig["AICreds"]["APIKeyField"]
     else:
-      LogEntry("APIKeyField not found in config, setting default to {}".format(strDefAIenvName))
+      LogEntry("APIKeyField not found in config, setting default to {}".format(strDefAIenvName),0)
       strAIAPIKeyField = strDefAIenvName
     if "MetricTokenField" in objConfig["AICreds"]:
       strMetricTokenField = objConfig["AICreds"]["MetricTokenField"]
     else:
        strMetricTokenField = None
   else:
-    LogEntry("section AICreds not found in config")
+    LogEntry("section AICreds not found in config",0)
 
   if "WPCreds" in objConfig:
     if strAuthMethod == "1pa":
       if "VaultID" in objConfig["WPCreds"]:
         strVaultID = objConfig["WPCreds"]["VaultID"]
       else:
-        LogEntry("VaultID not found in config")
+        LogEntry("VaultID not found in config",0)
       if "ItemID" in objConfig["WPCreds"]:
         strItemID = objConfig["WPCreds"]["ItemID"]
       else:
-        LogEntry("ItemID not found in config")
+        LogEntry("ItemID not found in config",0)
     if "ConsumerKeyField" in objConfig["WPCreds"]:
       strConsumerKeyField = objConfig["WPCreds"]["ConsumerKeyField"]
     else:
-      LogEntry("ConsumerKeyField not found in config")
+      LogEntry("ConsumerKeyField not found in config",0)
     if "ConsumerSecretField" in objConfig["WPCreds"]:
       strConsumerSecretField = objConfig["WPCreds"]["ConsumerSecretField"]
     else:
-      LogEntry("ConsumerSecretField not found in config")
+      LogEntry("ConsumerSecretField not found in config",0)
     if "BaseURLField" in objConfig["WPCreds"]:
       strBaseURLField = objConfig["WPCreds"]["BaseURLField"]
     else:
-      LogEntry("BaseURLField not found in config")
+      LogEntry("BaseURLField not found in config",0)
   else:
-    LogEntry("section WPCreds not found in config")
+    LogEntry("section WPCreds not found in config",0)
 
   if strAIsystemFile is None:
     LogEntry("Please provide a path to a text file providing context for AI Calls. "
@@ -1131,7 +1135,7 @@ def main():
               "assuming the file is called system.txt and is in the script directory.",0,True)
   else:
     if os.path.isfile(strAIsystemFile):
-      LogEntry("AI System file appears good")
+      LogEntry("AI System file appears good",1)
       objAISystem = GetFileHandle(strAIsystemFile,"r")
       strAIsystem = objAISystem.read()
       objAISystem.close()
@@ -1140,7 +1144,7 @@ def main():
 
   if strAttrEqFile is not None:
     if os.path.isfile(strAttrEqFile):
-      LogEntry("Attribute equivalence file {} found, processing.".format(strAttrEqFile))
+      LogEntry("Attribute equivalence file {} found, processing.".format(strAttrEqFile),1)
       objAttrEqFileHndl = GetFileHandle(strAttrEqFile, "r")
       dictAttrEq = {}
       for strLine in objAttrEqFileHndl:
@@ -1149,14 +1153,14 @@ def main():
           dictAttrEq[strKey.strip()] = strValue.strip()
       objAttrEqFileHndl.close()
     else:
-      LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile))
+      LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile),0)
   if not isInt(iMaxTokens):
-    LogEntry("MaxToken value of '{}' is not valid. Settign it to the default of {}".format(iMaxTokens,iDefMaxToken))
+    LogEntry("MaxToken value of '{}' is not valid. Setting it to the default of {}".format(iMaxTokens,iDefMaxToken),0)
     iMaxTokens = iDefMaxToken
   else:
      iMaxTokens = int(iMaxTokens)
   if strMetricURL and not strMetricTokenField:
-     LogEntry("You provided Metric URL but didn't specify where to find the token, disabling Metric posting")
+     LogEntry("You provided Metric URL but didn't specify where to find the token, disabling Metric posting",0)
      strMetricURL = None
 
   if not strAccountName and strAuthMethod == "1pa":
@@ -1172,9 +1176,9 @@ def main():
     strOutDir += "/"
   if not os.path.exists(strOutDir):
     os.makedirs(strOutDir)
-    LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir))
+    LogEntry("Output directory {} didn't exist, so I created it.".format(strOutDir),0)
   else:
-    LogEntry("Output directory {} good to go.".format(strOutDir))
+    LogEntry("Output directory {} good to go.".format(strOutDir),0)
 
   if strAuthMethod == "1pa":
     strCredMethod = "1Password"
@@ -1190,7 +1194,7 @@ def main():
     dictItemCollection["AICreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
-      strAccountName, "provided" if str1PassToken else "not provided"))
+      strAccountName, "provided" if str1PassToken else "not provided"),0)
 
     dictReturn = asyncio.run(get1PasswordItems(dictItemCollection, strAccountName=strAccountName, strToken=str1PassToken))
     if dictReturn is None:
@@ -1199,7 +1203,7 @@ def main():
       LogEntry("Fatal 1pass error: {}".format(dictReturn['fatal error']['error message']),0,True)
   elif strAuthMethod == "env":
     strCredMethod = "Environment Variables"
-    LogEntry("Using environment variable authentication method. Fetching credentials from environment variables.")
+    LogEntry("Using environment variable authentication method. Fetching credentials from environment variables.",0)
     dictItemCollection = {}
     dictItemSpecs = {}
     dictItemSpecs["BaseURLField"] = strBaseURLField
@@ -1225,50 +1229,51 @@ def main():
   if not strBaseURL or not strWCKey or not strWCSecret:
     LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
   if not strAIAPIKey:
-    LogEntry("No AI API key provided, won't be able to use AI")
+    LogEntry("No AI API key provided, won't be able to use AI",0)
   if strMetricURL and not strMetricToken:
-     LogEntry("You provided Metric URL but token is blank, disabling Metric posting")
+     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
      strMetricURL = None
 
-  LogEntry("Unless otherwise noted above, successfully retrieved credentials from {}. ".format(strCredMethod))
+  LogEntry("Unless otherwise noted above, successfully retrieved credentials from {}. ".format(strCredMethod),1)
   if strAction == "IMPORT" or strAction == "FIX":
-    LogEntry("Establish a connection to Anthropic API")
+    LogEntry("Establish a connection to Anthropic API",1)
     objAIClient = Anthropic(api_key=strAIAPIKey)
   else:
      objAIClient = None
 
-  LogEntry("Now loading various lists from WooCommerce to prepare for product updates.")
+  LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
   strMethod = "get"
   dictGlobalAttributes = LoadDictionaries("/wp-json/wc/v3/products/attributes", strBaseURL, strWCKey, strWCSecret)
   if not dictGlobalAttributes:
      LogEntry("No attributes, aborting",0,True)
-  LogEntry("Global Attributes loaded, total {} attributes".format(len(dictGlobalAttributes)))
+  LogEntry("Global Attributes loaded, total {} attributes".format(len(dictGlobalAttributes)),0)
   dictGlobalCategories = LoadDictionaries("/wp-json/wc/v3/products/categories", strBaseURL, strWCKey, strWCSecret)
-  LogEntry("Global categories loaded, total {} categories".format(len(dictGlobalCategories)))
+  LogEntry("Global categories loaded, total {} categories".format(len(dictGlobalCategories)),0)
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
-  LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)))
+  LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
-  LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)))
+  LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
 
   if strAction == "IMPORT":
     # The Import action takes place here
+    LogEntry("Now starting import action...",0)
     if strImportFile is not None:
       if os.path.isfile(strImportFile):
         lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,strAIsystem,objAIClient,strAIModel,iMaxTokens,",")
-        LogEntry("Finished import, here are the results:")
+        LogEntry("Finished import, here are the results:",0)
         for strSKU, dictResult in lstResults:
           if dictResult:
             if dictResult[0].get("Success"):
-              LogEntry("SKU {} Successful".format(strSKU))
+              LogEntry("SKU {} Successful".format(strSKU),0)
             else:
-              LogEntry("SKU {} had an issue. Code: {}, error: {}".format(strSKU,dictResult[1].get("errcode"),dictResult[1].get("errormsg")))
+              LogEntry("SKU {} had an issue. Code: {}, error: {}".format(strSKU,dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
           else:
-             LogEntry("Something odd is going on. SKU {} does not have a valid result tupple".format(strSKU))
+             LogEntry("Something odd is going on. SKU {} does not have a valid result tupple".format(strSKU),0)
       else:
-         LogEntry("Import File {} not found, can't do anything".format(strImportFile))
+         LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
     else:
-       LogEntry("Import File not defined, nothing to import")
+       LogEntry("Import File not defined, nothing to import",0)
     objLogOut.close()
     print("objLogOut closed")
     return
@@ -1289,7 +1294,7 @@ def main():
       strOutFileName = strOutDir + "ProdattrAudit_" + time.strftime(strTimeStampFormat) + ".csv"
     else:
       strOutFileName = strOutDir + "ProdattrAudit.csv"
-    LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName))
+    LogEntry("Starting audit of product descriptions for attributes. Output file is {}".format(strOutFileName),0)
     objFileOut = GetFileHandle(strOutFileName, "w")
     if objFileOut is None or isinstance(objFileOut, str):
       objFileOut = None
@@ -1312,13 +1317,13 @@ def main():
      for lstFilter in lstFilters:
         if ":" in lstFilter:
            strFilterKey, strFilterValue = lstFilter.split(":", 1)
-           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue))
+           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),1)
            dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
      dictParams["status"] = "publish"
   lstProductFailure = []
   while iProdCount > 0:
-    LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages))
+    LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
     strParams = urlparse.urlencode(dictParams)
     strURL = strBaseURL + strEndPoint + "?" + strParams
@@ -1326,23 +1331,23 @@ def main():
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
     LogEntry("API call successful, processing response. "
-             "{} total products in response, {} total pages".format(iTotal, iTotalPages),0)
+             "{} total products in response, {} total pages".format(iTotal, iTotalPages),1)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
     iTotalProducts += iProdCount
-    LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts))
+    LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts),1)
     iPage += 1
     for dictProduct in dictProducts:
       if "description" not in dictProduct or dictProduct["description"] is None:
         LogEntry("Product {} with SKU {} and name {} has no description, skipping.".format(dictProduct["id"],
-                                                                dictProduct["sku"], dictProduct["name"]))
+                                                                dictProduct["sku"], dictProduct["name"]),0)
         continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
       LogEntry("Working on product {} with SKU {} and name {}. "
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
-                  len(lstProdAttribs), len(dictAttributes)))
+                  len(lstProdAttribs), len(dictAttributes)),0)
       if strAction == "FIX":
         # Actual fix action
         lstCleanTags = []
@@ -1363,7 +1368,7 @@ def main():
         dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
           "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
         dictAttributes = ExtractTwoColumnTables(strNewDesc)
-        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)))
+        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),1)
 
       if strAction == "UPDATE" or strAction == "FIX":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
@@ -1371,7 +1376,7 @@ def main():
         for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
           if dictKey[0].strip() in dictAttrEq:
             strKey = dictAttrEq[dictKey[0].strip()]
-            LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey))
+            LogEntry("Changing attribute {} to {}".format(dictKey[0], strKey),0)
           else:
             strKey = dictKey[0].strip()
           if strKey == "MTBF" or strKey == "LED lifetime":
@@ -1381,24 +1386,24 @@ def main():
           if strKey.lower()[:28] in dictGlobalAttributes:
             iAttrID = dictGlobalAttributes[strKey.lower()[:28]]
           else:
-            LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey))
+            LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey),0)
             iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
             dictGlobalAttributes[strKey.lower()[:28]] = iAttrID
           AttrFound = AttributeExists(lstProdAttribs, strKey[:28])
           if isinstance(AttrFound,str) and AttrFound == "global":
-            LogEntry("Attribute {} already on product as global.".format(strKey))
+            LogEntry("Attribute {} already on product as global.".format(strKey),1)
           else:
             if iAttrID is None:
               LogEntry("Failed to create attribute {} on product {}. Skipping this attribute.".format(strKey, dictProduct["id"]),0,False)
               continue
             LogEntry("Attribute {} is not on product, or is local. Need to add {} to attributeID {} ".format(
-              strKey, lstValue, iAttrID))
+              strKey, lstValue, iAttrID),1)
 
             bVariation = False
             if isinstance(AttrFound,dict):
               if AttrFound["variation"]:
                 LogEntry("WARNING!! Converted attribute {} used for variation from local to global. "
-                           "ID:{} SKU:{} Name:{}".format(strKey, dictProduct["id"], dictProduct["sku"], dictProduct["name"]))
+                           "ID:{} SKU:{} Name:{}".format(strKey, dictProduct["id"], dictProduct["sku"], dictProduct["name"]),0)
               lstProdAttribs.remove(AttrFound)
               bVariation = AttrFound["variation"]
 
@@ -1409,7 +1414,7 @@ def main():
           dictResult = UpdateWooCommerceProduct({"attributes": lstProdAttribs},dictProduct["id"],
                                               strBaseURL, strWCKey, strWCSecret)
           if dictResult[0]["Success"]:
-            LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]))
+            LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
           else:
             lstProductFailure.append(dictProduct["id"])
             LogEntry("Failed to update product {} with new attributes. "
@@ -1429,8 +1434,8 @@ def main():
   if objFileOut is not None:
     objFileOut.close()
 
-  LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts))
-  LogEntry("Products that failed to update: {}".format(lstProductFailure))
+  LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts),0)
+  LogEntry("Products that failed to update: {}".format(lstProductFailure),0)
 
   objLogOut.close()
   print("objLogOut closed")
