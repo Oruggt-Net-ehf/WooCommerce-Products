@@ -83,7 +83,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
     dictPayload["output_tokens"] = objMessage.usage.output_tokens
     lstMetrics = Convert2OpenMetricGauge(dictPayload)
     WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken)
-    LogEntry("Response from metric server: {}".format(WebResponse),3)
+    LogEntry("Response from metric server: {}".format(WebResponse),1)
 
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
