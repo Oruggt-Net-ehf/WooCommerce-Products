@@ -1,4 +1,4 @@
-# WPWC
+# WooCommerce Products
 
 ## Introductions
 
