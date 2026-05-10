@@ -161,7 +161,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             strPrice = objRow.get("Price", "").strip()
             strGTIN = objRow.get("EAN/GTIN", "").strip()
             strBrand = objRow.get("Brand", "").strip()
-            if strBrand in dictGlobalBrands:
+            if strBrand.lower() in dictGlobalBrands:
               lstBrandID = [int(dictGlobalBrands[strBrand])]
               LogEntry("Brand {} has ID of {}".format(strBrand,lstBrandID))
             else:
@@ -177,6 +177,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
             dictProduct = {}
+            dictProduct["status"] = "pending"
             dictProduct["name"] = dictResult["Product_Name"]
             dictProduct["type"] = "simple"
             dictProduct["sku"] = strSKU
@@ -382,14 +383,14 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
   strMethod = "get"
   dictGeneric = {}
   dictParams = {}
-  dictParams["per_page"] = iPerPage
+  dictParams["per_page"] = 10 #iPerPage
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
     return{}
   LogEntry("API call successful, processing response. "
-             "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
+             "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),0)
 
   for dictEntry in dictResponse[1]:
     dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
@@ -405,7 +406,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
       if dictResponse[0]["Success"]==False:
         LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
       LogEntry("API call successful, processing response. "
-                "{} total entries in response, {} total pages".format(iTotal, iTotalPages),0)
+                "{} overall total entries per response across {} total pages".format(iTotal, iTotalPages),0)
       for dictEntry in dictResponse[1]:
         dictGeneric[dictEntry["name"].strip().lower()] = dictEntry["id"]
       iPage += 1
@@ -886,14 +887,12 @@ def main():
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
-                                      "Must specify one Action directive, otherwise defaults to audit. "
-                                      "If no config file is specified, "
+                                      "Must specify one Action directive. If no config file is specified, "
                                       "it will look for {} in the same directory as the script.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
                       action="store_true", help="only output to file, not to screen")
   objParser.add_argument("--audit", dest="audit",
-                      action="store_true", help="Action directive. Only audit products and attributes, no updates. "
-                      "Default action if no other action is specified.")
+                      action="store_true", help="Action directive. Only audit products and attributes, no updates. ")
   objParser.add_argument("--update", dest="update",
                       action="store_true", help="Action directive. Update all products with attributes parsed from description. "
                       "Required unless you specify another action, only one action can be specified.")
@@ -958,18 +957,20 @@ def main():
     LogEntry("Error: More than one action directive specified. "
              "Only one of --audit, --update, --import, or --fix can be used.",0,True)
   elif iActionCount == 0:
-    bAudit = True
-    LogEntry("No action directive specified, defaulting to --audit")
-
-  # Determine and set the action string
-  if bAudit:
-    strAction = "AUDIT"
-  elif bUpdate:
-    strAction = "UPDATE"
-  elif bImport:
-    strAction = "IMPORT"
-  elif bFix:
-    strAction = "FIX"
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT or FIX: ")
+    strAction = strAction.upper()
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX"]:
+      LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
+  else:
+    # Determine and set the action string
+    if bAudit:
+      strAction = "AUDIT"
+    elif bUpdate:
+      strAction = "UPDATE"
+    elif bImport:
+      strAction = "IMPORT"
+    elif bFix:
+      strAction = "FIX"
 
   LogEntry("Selected action: {}".format(strAction))
 
@@ -1242,16 +1243,28 @@ def main():
   dictGlobalAttributes = LoadDictionaries("/wp-json/wc/v3/products/attributes", strBaseURL, strWCKey, strWCSecret)
   if not dictGlobalAttributes:
      LogEntry("No attributes, aborting",0,True)
+  LogEntry("Global Attributes loaded, total {} attributes".format(len(dictGlobalAttributes)))
   dictGlobalCategories = LoadDictionaries("/wp-json/wc/v3/products/categories", strBaseURL, strWCKey, strWCSecret)
+  LogEntry("Global categories loaded, total {} categories".format(len(dictGlobalCategories)))
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
+  LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)))
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
+  LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)))
 
   if strAction == "IMPORT":
     # The Import action takes place here
     if strImportFile is not None:
       if os.path.isfile(strImportFile):
         lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,strAIsystem,objAIClient,strAIModel,iMaxTokens,",")
-        LogEntry("Finished import, here are the results:\n{}".format(lstResults))
+        LogEntry("Finished import, here are the results:")
+        for strSKU, dictResult in lstResults:
+          if dictResult:
+            if dictResult[0].get("Success"):
+              LogEntry("SKU {} Successful".format(strSKU))
+            else:
+              LogEntry("SKU {} had an issue. Code: {}, error: {}".format(strSKU,dictResult[1].get("errcode"),dictResult[1].get("errormsg")))
+          else:
+             LogEntry("Something odd is going on. SKU {} does not have a valid result tupple".format(strSKU))
       else:
          LogEntry("Import File {} not found, can't do anything".format(strImportFile))
     else:
