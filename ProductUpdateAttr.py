@@ -49,8 +49,9 @@ else:
 tLastCall = 0
 iTotalSleep = 0
 iTimeOut = 180  # Max time in seconds to wait for network response
-iMinQuiet = 2  # Minimum time in seconds between API calls
+iMinQuiet = 10  # Minimum time in seconds between API calls
 strDefAIenvName = "ANTHROPIC_API_KEY"
+iDefMaxToken = 2048
 strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
 
 sentry_sdk.init(
@@ -84,6 +85,14 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   dictSystemPrompt["cache_control"] = {"type": "ephemeral"}
 
   objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  if strMetricURL:
+    dictPayload = {}
+    dictPayload["input_tokens"] = objMessage.usage.input_tokens
+    dictPayload["output_tokens"] = objMessage.usage.output_tokens
+    lstMetrics = Convert2OpenMetricGauge(dictPayload)
+    WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken)
+    LogEntry("Response from metric server: {}".format(WebResponse))
+
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens))
   return ParseJsonResponse(objMessage.content[0].text)
 
@@ -672,6 +681,45 @@ def FetchEnv(strVarName):
   else:
     return None
 
+def Convert2OpenMetricGauge(dictPayloads):
+    """
+    Transform a dictionary of metrics into OpenMetrics format, type Gauge.
+
+    Parameters:
+      dictPayloads: Dictionary with metric names as keys and numerical values
+
+    Returns:
+      List of dictionaries in OpenMetrics format
+
+    Example:
+      >>> BuildMetricsPayload({"temperature": 45.2, "clock_speed": 1800})
+      [
+          {"name": "temperature", "gauge": {"value": 45.2}},
+          {"name": "clock_speed", "gauge": {"value": 1800}}
+      ]
+    """
+    listMetrics = []
+    for metric_name, metric_value in dictPayloads.items():
+        dictMetric = {
+            "name": metric_name,
+            "gauge": {
+                "value": metric_value
+            }
+        }
+        listMetrics.append(dictMetric)
+    return listMetrics
+
+def SubmitMetric(dictPayload:dict,strURL:str,strToken:str):
+  strMethod = "post"
+
+  LogEntry("Submitting metric to server:{}".format(json.dumps(dictPayload)),3)
+  dictHeader = {}
+  dictHeader["Content-type"] = "application/json"
+  dictHeader["Authorization"] = "Bearer " + strToken
+  WebRequest = MakeAPICall(strURL,dictHeader,strMethod,dictPayload)
+
+  return WebRequest
+
 def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objData=None, strUser="", strPWD=""):
   """
   Handles the actual communication with the API, has a backoff mechanism
@@ -823,6 +871,8 @@ def main():
   global dictGlobalTags
   global dictGlobalBrands
   global iPerPage
+  global strMetricURL
+  global strMetricToken
 
   dictProxies = {}
   strOutDir = None
@@ -830,7 +880,6 @@ def main():
   strAccountName = None
 
   strDefAImodel = "claude-sonnet-4-6"
-  iDefMaxToken = 512
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
@@ -970,13 +1019,17 @@ def main():
     else:
       strDefOutDir = strBaseDir + "Output/"
     if "MaxTokens" in objConfig["Generic"]:
-       iMaxTokens = objConfig["Generic"]["MaxTokens"]
+      iMaxTokens = objConfig["Generic"]["MaxTokens"]
     else:
-       iMaxTokens = None
+      iMaxTokens = None
     if "AIModel" in objConfig["Generic"]:
-       strAIModel = objConfig["Generic"]["AIModel"]
+      strAIModel = objConfig["Generic"]["AIModel"]
     else:
-       strAIModel = strDefAImodel
+      strAIModel = strDefAImodel
+    if "MetricURL" in objConfig["Generic"]:
+      strMetricURL = objConfig["Generic"]["MetricURL"]
+    else:
+       strMetricURL = None
     if "ImportFile" in objConfig["Generic"]:
       strImportFile = objConfig["Generic"]["ImportFile"]
     else:
@@ -1032,11 +1085,15 @@ def main():
         strAIItemID = objConfig["AICreds"]["ItemID"]
       else:
         LogEntry("ItemID not found in config")
-    if "APIKey" in objConfig["AICreds"]:
-      strAIAPIKeyField = objConfig["AICreds"]["APIKey"]
+    if "APIKeyField" in objConfig["AICreds"]:
+      strAIAPIKeyField = objConfig["AICreds"]["APIKeyField"]
     else:
-      LogEntry("APIKey not found in config, setting default to {}".format(strDefAIenvName))
+      LogEntry("APIKeyField not found in config, setting default to {}".format(strDefAIenvName))
       strAIAPIKeyField = strDefAIenvName
+    if "MetricTokenField" in objConfig["AICreds"]:
+      strMetricTokenField = objConfig["AICreds"]["MetricTokenField"]
+    else:
+       strMetricTokenField = None
   else:
     LogEntry("section AICreds not found in config")
 
@@ -1095,7 +1152,9 @@ def main():
     iMaxTokens = iDefMaxToken
   else:
      iMaxTokens = int(iMaxTokens)
-
+  if strMetricURL and not strMetricTokenField:
+     LogEntry("You provided Metric URL but didn't specify where to find the token, disabling Metric posting")
+     strMetricURL = None
 
   if not strAccountName and strAuthMethod == "1pa":
      LogEntry("Auth method is 1Password but 1Password account name not specified, can't proceed",0,True)
@@ -1124,6 +1183,7 @@ def main():
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strAIVaultID
     dictItemSpecs["item_id"] = strAIItemID
+    dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemCollection["AICreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
@@ -1144,21 +1204,30 @@ def main():
     dictItemSpecs["ConsumerSecretField"] = strConsumerSecretField
     dictItemCollection["WCreds"] = dictItemSpecs
     dictItemSpecs = {}
+    dictItemSpecs["metric_key"] = strMetricTokenField
+    dictItemSpecs["AISecret"] = strAIAPIKeyField
     dictItemCollection["AICreds"] = dictItemSpecs
 
     dictReturn = GetEnvCreds(dictItemCollection)
-    if not dictReturn or "WCreds" not in dictReturn:
-      LogEntry("Failed to retrieve credentials from environment variables.",0,True)
 
-  strBaseURL = dictReturn["WCreds"][strBaseURLField]
-  strWCKey = dictReturn["WCreds"][strConsumerKeyField]
-  strWCSecret = dictReturn["WCreds"][strConsumerSecretField]
-  strAIAPIKey = dictReturn["AICreds"][strAIAPIKeyField]
+  if not dictReturn or "WCreds" not in dictReturn or "AICreds" not in dictReturn:
+    LogEntry("Failed to retrieve credentials from environment variables.",0,True)
+
+  strBaseURL = dictReturn["WCreds"].get(strBaseURLField)
+  strWCKey = dictReturn["WCreds"].get(strConsumerKeyField)
+  strWCSecret = dictReturn["WCreds"].get(strConsumerSecretField)
+  strAIAPIKey = dictReturn["AICreds"].get(strAIAPIKeyField)
+  strMetricToken = dictReturn["AICreds"].get(strMetricTokenField)
 
   if not strBaseURL or not strWCKey or not strWCSecret:
-      LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
+    LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
+  if not strAIAPIKey:
+    LogEntry("No AI API key provided, won't be able to use AI")
+  if strMetricURL and not strMetricToken:
+     LogEntry("You provided Metric URL but token is blank, disabling Metric posting")
+     strMetricURL = None
 
-  LogEntry("Successfully retrieved credentials from {}. ".format(strCredMethod))
+  LogEntry("Unless otherwise noted above, successfully retrieved credentials from {}. ".format(strCredMethod))
   if strAction == "IMPORT" or strAction == "FIX":
     LogEntry("Establish a connection to Anthropic API")
     objAIClient = Anthropic(api_key=strAIAPIKey)
