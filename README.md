@@ -4,6 +4,7 @@
 
 Script that analyzes product description in WooCommerce and turns a spec list into attributes.
 Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
+Secret management is by default handled by 1Password but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
 
 Author Siggi Bjarnason 21 April 2026\
 Copyright 2026 Siggi Bjarnason
@@ -40,33 +41,36 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 
 `[Generic]`
 `AuthMethod = 1Password` or `Env` *(only first three characters are relevant, not case sensitive)*\
-`1PassAccount = my account name` *Required when 1Password is the method ignored on env. The name of your 1Password account as shown in Manage accounts*\
+`1PassAccount = my account name` *(Required when 1Password is the method, unless you are using token. Ignored on env. The name of your 1Password account as shown in Manage accounts)*\
+`1PassTokenEnvVar = 1PASSTOKEN` *(If you are using 1Password in token mode rather than account mode, this is the name of the environment variable for the token. Defaults to "1PASSTOKEN" if not provided )*\
 `FileTimeStampFormat = %%Y-%%m-%%d-%%H-%%M-%%S` *(standard python time stamp format, double percent for escape purposes)*\
 `TimeStampAudit = false` or `true` *(Do you want the audit filename to have a timestamp in it.)*\
-`PerPage = 25` *(When doing API operations, how many items should be fetch per time. Max 100, 25 seems to be very effective)*\
+`PerPage = 25` *(When doing API operations, how many items should be fetch per API call. Max 100, 25 seems to be very effective)*\
 `FixStatus = draft` *(For operations FIX, what product status should be filtered on. Recommend only fixing products in draft state)*\
 `FixTag = NeedsFixing` (*Additional filter safety net for FIX operation, flag products needing fixing with specified tag. Blank disables this filter*)\
 `FixCategory = Uncategorized` *(Additional filter safety net for FIX operation, only fix products in this category.)*\
-`MetricURL = https://xxxx.yyyy.betterstackdata.com` *(Provide your Better Stack or other OpenMetric server URL here.)*\
+`IngestionHost = xxxx.yyyy.betterstackdata.com` *(Provide your Better Stack or other OpenMetric ingesting host here.)*\
+`MetricEndpoint = metrics` *(The endpoint to post the metrics to. For Better stack the pattern is schema+igestionhost+"metrics" or `https://xxxx.yyyy.betterstackdata.com/metrics` defaults to "metrics" if not supplied)*\
 `OutDir = c:\temp` *(The directory where all write operations should take place)*\
 `ImportFile = c:\temp\myimportfile.csv` *(Full path of the import file needed for import operations)*\
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\
 `AIModel = claude-sonnet-4-6` *(What AI model should we use?)*\
 `MaxTokens = 2048`  *(Safety net for runaway output, call will terminated if it uses more than this many tokens)*\
+`MaxCharIn = 1000` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 
 `[WPCreds]\`
-`VaultID = xxxxxxxx` *(1Password vault ID where item is kept)*\
-`ItemID = yyyyyyy` *(The item of the item holding the WooCommerce API credentials)*\
+`VaultID = xxxxxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyyyy` *(The item of the item holding the WooCommerce API credentials, leave off for env auth)*\
 `ConsumerKeyField = username` *(name of the field in 1Password or env variable name holding the consumer key)*\
 `ConsumerSecretField = credential` *(name of the field in 1Password or env variable name holding the consumer secret)*\
 `BaseURLField = hostname` *(Name of the field or env variable name holding the base URL)*
 
 `[AICreds]`
-`VaultID = xxxxx` *(1Password vault ID where item is kept)*\
-`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials\)*
-`APIKeyField = credential` *(The name of the field or env variable with the API key)*\
-`MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Token)*
+`VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
+`APIKeyField = credential` *(The name of the field or env variable with the AI API key)*\
+`MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Source Token)*
 
 ## Attribute Substitution
 

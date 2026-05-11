@@ -41,10 +41,13 @@ tLastCall = 0
 iTotalSleep = 0
 iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 10  # Minimum time in seconds between API calls
-strDefAIenvName = "ANTHROPIC_API_KEY"
-iDefMaxToken = 2048
-iDefPerPage = 25
-strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117"
+strDefAIenvName = "ANTHROPIC_API_KEY" # Name of the environment variable where the AI key is stored, if using env variable for auth
+strDefMetricEndPoint = "metrics" # Endpoint to submit metrics to, appended to the ingestion host
+strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where the 1Password token is stored, if using token for auth
+iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
+iDefPerPage = 25 # Number of items to fetch per page for API calls
+
+strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117" # Sentry URL for error logging, replace with your own if needed
 
 sentry_sdk.init(
     dsn=strSentryURL,
@@ -82,7 +85,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
     dictPayload["input_tokens"] = objMessage.usage.input_tokens
     dictPayload["output_tokens"] = objMessage.usage.output_tokens
     lstMetrics = Convert2OpenMetricGauge(dictPayload)
-    WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken)
+    WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken,strEndPoint=strMetricEndpoint)
     LogEntry("Response from metric server: {}".format(WebResponse),1)
 
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
@@ -731,9 +734,9 @@ def Convert2OpenMetricGauge(dictPayloads):
         listMetrics.append(dictMetric)
     return listMetrics
 
-def SubmitMetric(dictPayload:dict,strURL:str,strToken:str):
+def SubmitMetric(dictPayload:dict,strURL:str,strToken:str,strEndPoint:str="metrics")->dict:
   strMethod = "post"
-  strURL = strURL + "/metrics"
+  strURL = strURL + strEndPoint
 
   LogEntry("Submitting metric to server:{}".format(json.dumps(dictPayload)),3)
   dictHeader = {}
@@ -896,6 +899,7 @@ def main():
   global iPerPage
   global strMetricURL
   global strMetricToken
+  global strMetricEndpoint
 
   dictProxies = {}
   strOutDir = None
@@ -926,6 +930,7 @@ def main():
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
   objParser.add_argument("-o", "--outdir", type=str, help="Output directory for generated files")
+  objParser.add_argument("-i", "--input", type=str, help="Input file for product import action, overrides config file setting for import file")
 
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
@@ -1033,7 +1038,11 @@ def main():
       if "1PassAccount" in objConfig["Generic"]:
         strAccountName = objConfig["Generic"]["1PassAccount"]
       else:
-        LogEntry("Account name not found in config",0)
+        LogEntry("Account name not found in config",1)
+      if "1PassToken" in objConfig["Generic"]:
+        str1PassToken = objConfig["Generic"]["1PassToken"]
+      else:
+        str1PassToken = strDef1PassTokenEnvVar
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -1046,18 +1055,31 @@ def main():
       strAIModel = objConfig["Generic"]["AIModel"]
     else:
       strAIModel = strDefAImodel
-    if "MetricURL" in objConfig["Generic"]:
-      strMetricURL = objConfig["Generic"]["MetricURL"]
+    if "IngestionHost" in objConfig["Generic"]:
+      strMetricURL = objConfig["Generic"]["IngestionHost"]
     else:
-       strMetricURL = None
+      strMetricURL = None
+    if "MetricEndpoint" in objConfig["Generic"]:
+      strMetricEndpoint = objConfig["Generic"]["MetricEndpoint"]
+    else:
+      strMetricEndpoint = strDefMetricEndPoint
     if "ImportFile" in objConfig["Generic"]:
       strImportFile = objConfig["Generic"]["ImportFile"]
     else:
-       strImportFile = None
+      strImportFile = None
     if "AIBackgroundFile" in objConfig["Generic"]:
-       strAIsystemFile = objConfig["Generic"]["AIBackgroundFile"]
+      strAIsystemFile = objConfig["Generic"]["AIBackgroundFile"]
     else:
-       strAIsystemFile = None
+      strAIsystemFile = None
+    if "MaxCharIn" in objConfig["Generic"]:
+      strMaxCharIn = objConfig["Generic"]["MaxCharIn"]
+      if isInt(strMaxCharIn):
+        iMaxCharIn = int(strMaxCharIn)
+      else:
+        LogEntry("MaxCharIn value in config is not an integer, defaulting to 0",0)
+        iMaxCharIn = 0
+    else:
+      iMaxCharIn = 0
     if "FileTimeStampFormat" in objConfig["Generic"]:
       strTimeStampFormat = objConfig["Generic"]["FileTimeStampFormat"]
     else:
@@ -1142,6 +1164,9 @@ def main():
   else:
     LogEntry("section WPCreds not found in config",0)
 
+  if objArgs.input is not None:
+    strImportFile = objArgs.input
+
   if strAIsystemFile is None:
     LogEntry("Please provide a path to a text file providing context for AI Calls. "
               "Put it in the general section of the config file as 'AIBackgroundFile = system.txt' "
@@ -1179,7 +1204,10 @@ def main():
   if not strAccountName and strAuthMethod == "1pa":
      LogEntry("Auth method is 1Password but 1Password account name not specified, can't proceed",0,True)
 
-  str1PassToken = FetchEnv("TOKEN")
+  if not strMetricEndpoint:
+      strMetricEndpoint = strDefMetricEndPoint
+
+  str1PassToken = FetchEnv(strDef1PassTokenEnvVar)
   if not str1PassToken:
     str1PassToken = None
 
@@ -1252,6 +1280,8 @@ def main():
   LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),2)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
+  if strMetricURL[:-1] != "/":
+     strMetricURL = strMetricURL + "/"
 
   LogEntry("Unless otherwise noted above, successfully retrieved credentials from {}. ".format(strCredMethod),1)
   if strAction == "IMPORT" or strAction == "FIX":
@@ -1293,9 +1323,9 @@ def main():
          LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
     else:
        LogEntry("Import File not defined, nothing to import",0)
-    objLogOut.close()
-    print("objLogOut closed")
-    return
+    #objLogOut.close()
+    #print("objLogOut closed")
+    #return
 
   if strAction == "FIX":
     # here is the fix function initialized
@@ -1318,9 +1348,9 @@ def main():
     if objFileOut is None or isinstance(objFileOut, str):
       objFileOut = None
       LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
-    objFileOut.write("Brand,SKU,Name,Existing Attribute Count,Description Attributes Count\n")
+    objFileOut.write("Brand,SKU,Name,Descr len,Existing Attribute Count,Description Attributes Count\n")
 
-  # Here is basic prep work for FIX, AUDIT and UPDATE
+  # Here is basic prep work for all actions
   iPage = 1
   iProdCount = 5
   iTotalProducts = 0
@@ -1335,11 +1365,16 @@ def main():
      lstFilters = strFilter.split("|")
      for lstFilter in lstFilters:
         if ":" in lstFilter:
-           strFilterKey, strFilterValue = lstFilter.split(":", 1)
-           LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
-           dictParams[strFilterKey] = strFilterValue
+          strFilterKey, strFilterValue = lstFilter.split(":", 1)
+          LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
+          dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
-     dictParams["status"] = "publish"
+    dictParams["status"] = "publish"
+  if strAction == "IMPORT": # For the products we just imported we want to apply attributes as if it was an update
+    dictParams = {}
+    dictParams["per_page"] = iPerPage
+    dictParams["status"] = "pending"
+
   lstProductFailure = []
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
@@ -1377,7 +1412,11 @@ def main():
                 lstCleanTags.append(dictTag)
         else:
           lstCleanTags = dictProduct["tags"]
-        dictNewDesc = GenerateProductDescription(dictProduct["name"],strAIsystem,objAIClient,strAIModel,iMaxTokens)
+        if len(dictProduct["description"]) < iMaxCharIn:
+          strPrompt = dictProduct["name "] + " " + dictProduct["description"]
+        else:
+          strPrompt = dictProduct["name"]
+        dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
         if not isinstance(dictNewDesc,dict):
            LogEntry("New Description is not a dict, something went wrong with AI generation, "
                     "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
@@ -1389,7 +1428,7 @@ def main():
         dictAttributes = ExtractTwoColumnTables(strNewDesc)
         LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),1)
 
-      if strAction == "UPDATE" or strAction == "FIX":
+      if strAction == "UPDATE" or strAction == "FIX" or strAction == "IMPORT":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
         bNeedUpdate = False
         for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
@@ -1446,8 +1485,8 @@ def main():
             strBrand = dictBrands[0]["name"]
       if strAction == "AUDIT":
         # write out the audit file
-        objFileOut.write("{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), len(lstProdAttribs), len(dictAttributes)))
+        objFileOut.write("{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
+            dictProduct["name"].replace(","," ").strip(), len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
   if objFileOut is not None:
