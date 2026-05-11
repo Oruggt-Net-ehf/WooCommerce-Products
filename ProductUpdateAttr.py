@@ -47,15 +47,6 @@ strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where t
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
 
-strSentryURL = "https://prxVN17LbuNbxB4Tg2vK8g4x@s2386117.eu-fsn-3.betterstackdata.com/2386117" # Sentry URL for error logging, replace with your own if needed
-
-sentry_sdk.init(
-    dsn=strSentryURL,
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for performance monitoring.
-    traces_sample_rate=1.0,
-)
-
 # sub defs
 
 def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strModel:str, iMaxToken:int)->dict:
@@ -1018,11 +1009,25 @@ def main():
   else:
     LogEntry ("Can't find configuration file {}, defaulting to {}".format(strConfile,strDefConf))
     strConfile = strDefConf
+  if not os.path.isfile(strConfile):
+    LogEntry ("Can't find configuration file {}, aborting".format(strConfile),0,True)
 
-  objConFileHndl = GetFileHandle(strConfile, "r")
-  objConfig = configparser.ConfigParser()
-  objConfig.read_file(objConFileHndl)
-  objConFileHndl.close()
+  try:
+    objConFileHndl = GetFileHandle(strConfile, "r")
+    objConfig = configparser.ConfigParser()
+    objConfig.read_file(objConFileHndl)
+    objConFileHndl.close()
+  except Exception as e:
+    LogEntry("Error occurred while reading configuration file: {}".format(str(e)),0,True)
+
+  strSentryDSN = objConfig.get("Generic", "SentryDSN", fallback="") or FetchEnv("SENTRY_DSN")
+
+  sentry_sdk.init(
+      dsn=strSentryDSN,
+      # Set traces_sample_rate to 1.0 to capture 100%
+      # of transactions for performance monitoring.
+      traces_sample_rate=1.0,
+  )
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1417,7 +1422,7 @@ def main():
         else:
           lstCleanTags = dictProduct["tags"]
         if len(dictProduct["description"]) < iMaxCharIn:
-          strPrompt = dictProduct["name "] + " " + dictProduct["description"]
+          strPrompt = dictProduct["name"] + " " + dictProduct["description"]
         else:
           strPrompt = dictProduct["name"]
         dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)

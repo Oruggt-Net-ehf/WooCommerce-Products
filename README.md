@@ -3,8 +3,13 @@
 ## Introductions
 
 Script that analyzes product description in WooCommerce and turns a spec list into attributes.
-Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.\
+Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
+
 Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
+
+If you provide an ingestion host and source token for a metric server like Better Stack telemetry server, the token consumption from each fix and import action will be logged there.
+
+Also sentry reporting is integrated. You provide your DSN below or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
 
 Author Siggi Bjarnason 21 April 2026\
 Copyright 2026 Siggi Bjarnason
@@ -52,6 +57,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `FixCategory = Uncategorized` *(Additional filter safety net for FIX operation, only fix products in this category.)*\
 `IngestionHost = xxxx.yyyy.betterstackdata.com` *(Provide your Better Stack or other OpenMetric ingesting host here.)*\
 `MetricEndpoint = metrics` *(The endpoint to post the metrics to. For Better stack the pattern is schema+igestionhost+"metrics" or `https://xxxx.yyyy.betterstackdata.com/metrics` defaults to "metrics" if not supplied)*\
+`SentryDSN = https://asdfjælasjdflæajsdlfjlaj@xxxxyyyxxx.eu-fsn-3.betterstackdata.com/123564` *(Your sentry DSN, leave this blank to disable Sentry)*\
 `OutDir = c:\temp` *(The directory where all write operations should take place)*\
 `ImportFile = c:\temp\myimportfile.csv` *(Full path of the import file needed for import operations)*\
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\

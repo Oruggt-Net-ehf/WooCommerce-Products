@@ -8,6 +8,7 @@ FixTag = NeedsFixing
 FixCategory = Uncategorized
 IngestionHost = Better Stack or similar OpenMetric server for posting metric. Empty disables metric posting
 MetricEndpoint = metrics
+SentryDSN = https://asdfjælasjdflæajsdlfjlaj@xxxxyyyxxx.eu-fsn-3.betterstackdata.com/123564
 OutDir = c:\temp
 ImportFile = c:\temp\input.csv
 AIBackgroundFile = system.txt
