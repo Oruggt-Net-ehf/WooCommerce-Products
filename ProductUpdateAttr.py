@@ -1348,7 +1348,7 @@ def main():
     if objFileOut is None or isinstance(objFileOut, str):
       objFileOut = None
       LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
-    objFileOut.write("Brand,SKU,Name,Descr len,Existing Attribute Count,Description Attributes Count\n")
+    objFileOut.write("Brand,SKU,Name,Status,Descr len,Existing Attribute Count,Description Attributes Count\n")
 
   # Here is basic prep work for all actions
   iPage = 1
@@ -1486,11 +1486,12 @@ def main():
       if strAction == "AUDIT":
         # write out the audit file
         objFileOut.write("{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
+            dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
   if objFileOut is not None:
     objFileOut.close()
+    LogEntry("Audit file {} closed".format(strOutFileName),0)
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts),0)
   LogEntry("Products that failed to update: {}".format(lstProductFailure),0)

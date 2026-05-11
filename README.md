@@ -4,7 +4,7 @@
 
 Script that analyzes product description in WooCommerce and turns a spec list into attributes.
 Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
-Secret management is by default handled by 1Password but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
+Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
 
 Author Siggi Bjarnason 21 April 2026\
 Copyright 2026 Siggi Bjarnason
@@ -36,6 +36,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
   `-v, --verbosity`      Verbose output, vv level 2 vvvv level 4\
   `-x, --proxy PROXY`    Proxy to use for API calls. Optional\
   `-o, --outdir OUTDIR`  Output directory for generated files. Optional. Defaults to folder named output in the script directory\
+  `-i, --input INPUT`    Input file for product import action, overrides config file setting for import file
 
 ## Configuration file explained
 
