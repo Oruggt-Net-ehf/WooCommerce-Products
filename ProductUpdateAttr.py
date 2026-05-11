@@ -1359,21 +1359,25 @@ def main():
   strMethod = "get"
   dictParams = {}
   dictParams["per_page"] = iPerPage
-  if strFilter is not None:
-     if strFilter.endswith("|"):
-        strFilter = strFilter[:-1]
-     lstFilters = strFilter.split("|")
-     for lstFilter in lstFilters:
-        if ":" in lstFilter:
-          strFilterKey, strFilterValue = lstFilter.split(":", 1)
-          LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
-          dictParams[strFilterKey] = strFilterValue
+  if strFilter is None:
+    LogEntry("No filter specified, processing all products. This may take a while if you have a lot of products, so be patient...",0)
+  else:
+    if strFilter.endswith("|"):
+      strFilter = strFilter[:-1]
+    lstFilters = strFilter.split("|")
+    for lstFilter in lstFilters:
+      if ":" in lstFilter:
+        strFilterKey, strFilterValue = lstFilter.split(":", 1)
+        LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
+        dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
     dictParams["status"] = "publish"
+    LogEntry("For update action, only fetching published products in addition to any other filters specified",0)
   if strAction == "IMPORT": # For the products we just imported we want to apply attributes as if it was an update
     dictParams = {}
     dictParams["per_page"] = iPerPage
     dictParams["status"] = "pending"
+    LogEntry("For import action, only fetching products with pending status to apply attributes, ignoring all other filters",0)
 
   lstProductFailure = []
   while iProdCount > 0:
@@ -1494,7 +1498,7 @@ def main():
     LogEntry("Audit file {} closed".format(strOutFileName),0)
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts),0)
-  LogEntry("Products that failed to update: {}".format(lstProductFailure),0)
+  #LogEntry("Products that failed to update: {}".format(lstProductFailure),0)
 
   objLogOut.close()
   print("objLogOut closed")
