@@ -1279,10 +1279,10 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),2)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),2)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),1)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -1328,9 +1328,8 @@ def main():
          LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
     else:
        LogEntry("Import File not defined, nothing to import",0)
-    #objLogOut.close()
-    #print("objLogOut closed")
-    #return
+    LogEntry("Next up, applying attributes to the products we just imported...",0)
+
 
   if strAction == "FIX":
     # here is the fix function initialized
@@ -1364,7 +1363,7 @@ def main():
   strMethod = "get"
   dictParams = {}
   dictParams["per_page"] = iPerPage
-  if strFilter is None:
+  if strFilter is None and strAction == "AUDIT":
     LogEntry("No filter specified, processing all products. This may take a while if you have a lot of products, so be patient...",0)
   else:
     if strFilter.endswith("|"):
@@ -1434,8 +1433,9 @@ def main():
         strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
         dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
           "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+        LogEntry("Finished updating description for product {}. Now extracting attributes from new description to update attributes if needed.".format(dictProduct["id"]),0)
         dictAttributes = ExtractTwoColumnTables(strNewDesc)
-        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),1)
+        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),0)
 
       if strAction == "UPDATE" or strAction == "FIX" or strAction == "IMPORT":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
@@ -1503,7 +1503,6 @@ def main():
     LogEntry("Audit file {} closed".format(strOutFileName),0)
 
   LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts),0)
-  #LogEntry("Products that failed to update: {}".format(lstProductFailure),0)
 
   objLogOut.close()
   print("objLogOut closed")
