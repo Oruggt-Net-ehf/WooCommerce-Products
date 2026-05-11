@@ -61,14 +61,14 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000)*\
 
-`[WPCreds]\`
+`[WPCreds]`\
 `VaultID = xxxxxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyyyy` *(The item of the item holding the WooCommerce API credentials, leave off for env auth)*\
 `ConsumerKeyField = username` *(name of the field in 1Password or env variable name holding the consumer key)*\
 `ConsumerSecretField = credential` *(name of the field in 1Password or env variable name holding the consumer secret)*\
 `BaseURLField = hostname` *(Name of the field or env variable name holding the base URL)*
 
-`[AICreds]`
+`[AICreds]`\
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `APIKeyField = credential` *(The name of the field or env variable with the AI API key)*\
