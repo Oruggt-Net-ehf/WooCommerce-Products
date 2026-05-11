@@ -1021,6 +1021,7 @@ def main():
     LogEntry("Error occurred while reading configuration file: {}".format(str(e)),0,True)
 
   strSentryDSN = objConfig.get("Generic", "SentryDSN", fallback="") or FetchEnv("SENTRY_DSN")
+  LogEntry("Sentry DSN is set: {}".format(bool(strSentryDSN)), 0)
 
   sentry_sdk.init(
       dsn=strSentryDSN,
@@ -1028,6 +1029,9 @@ def main():
       # of transactions for performance monitoring.
       traces_sample_rate=1.0,
   )
+
+  #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
+
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1363,8 +1367,9 @@ def main():
   strMethod = "get"
   dictParams = {}
   dictParams["per_page"] = iPerPage
-  if strFilter is None and strAction == "AUDIT":
-    LogEntry("No filter specified, processing all products. This may take a while if you have a lot of products, so be patient...",0)
+  if strFilter is None:
+    if strAction == "AUDIT":
+      LogEntry("No filter specified, processing all products. This may take a while if you have a lot of products, so be patient...",0)
   else:
     if strFilter.endswith("|"):
       strFilter = strFilter[:-1]
