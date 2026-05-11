@@ -1,6 +1,5 @@
 [Generic]
 AuthMethod = env
-1PassAccount = Your Account name
 FileTimeStampFormat = %%Y-%%m-%%d-%%H-%%M-%%S
 TimeStampAudit = false
 PerPage = 25
@@ -8,11 +7,13 @@ FixStatus = draft
 FixTag = NeedsFixing
 FixCategory = Uncategorized
 IngestionHost = Better Stack or similar OpenMetric server for posting metric. Empty disables metric posting
+MetricEndpoint = metrics
 OutDir = c:\temp
 ImportFile = c:\temp\input.csv
 AIBackgroundFile = system.txt
 AIModel = claude-sonnet-4-6
 MaxTokens = 2048
+MaxCharIn = 500
 AttrEqFile = AttrEq.csv
 #Filter = sku:49172
 #Filter = sku:D53G-5HacD2HnD-TC&amp;FG621-EA

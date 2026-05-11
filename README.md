@@ -57,8 +57,9 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\
 `AIModel = claude-sonnet-4-6` *(What AI model should we use?)*\
 `MaxTokens = 2048`  *(Safety net for runaway output, call will terminated if it uses more than this many tokens)*\
-`MaxCharIn = 1000` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
+`MaxCharIn = 500` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
+`Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000)*\
 
 `[WPCreds]\`
 `VaultID = xxxxxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
