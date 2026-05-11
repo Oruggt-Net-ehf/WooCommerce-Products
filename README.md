@@ -3,7 +3,7 @@
 ## Introductions
 
 Script that analyzes product description in WooCommerce and turns a spec list into attributes.
-Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
+Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.\
 Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
 
 Author Siggi Bjarnason 21 April 2026\
@@ -25,7 +25,7 @@ pip install anthropic
 
 WooCommerce Product description parser and attrib creator. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
 
-`options:\`
+`options:`\
   `-h, --help`           show this help message and exit\
   `--silent`             only output to file, not to screen\
   `--audit`              Action directive. Only audit products and attributes, no updates. Prints out the product name & sku along with how many attributes it has and how many attributes are in text. No overlap information available.\
@@ -40,7 +40,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 
 ## Configuration file explained
 
-`[Generic]`
+`[Generic]`\
 `AuthMethod = 1Password` or `Env` *(only first three characters are relevant, not case sensitive)*\
 `1PassAccount = my account name` *(Required when 1Password is the method, unless you are using token. Ignored on env. The name of your 1Password account as shown in Manage accounts)*\
 `1PassTokenEnvVar = 1PASSTOKEN` *(If you are using 1Password in token mode rather than account mode, this is the name of the environment variable for the token. Defaults to "1PASSTOKEN" if not provided )*\
