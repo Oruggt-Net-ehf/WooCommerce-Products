@@ -448,51 +448,59 @@ async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=No
                     },
                     ...
     """
-
-    strScriptName = os.path.basename(sys.argv[0])
-    strVersion = "{0}.{1}.{2}".format(sys.version_info[0],sys.version_info[1],sys.version_info[2])
-    try:
-        if strToken is not None:
-            LogEntry("Using token-based authentication. Make sure the token is valid and has the necessary permissions.",2)
-            objClient = await Client.authenticate(auth=strToken,
-            integration_name=strScriptName,
-            integration_version=strVersion,)
-        else:
-            # Connects to the 1Password desktop app.
-            LogEntry("No token provided. Using DesktopAuth for authentication. "
-                     "Make sure the 1Password desktop app is running and you are signed in.",2)
-            if strAccountName is None:
-                return {"fatal error":
-                        {"error message":"neither token nor 1Password account name provided. Unable to authenticate."}}
-            objClient = await Client.authenticate(
+    if not strAccountName and not strToken:
+      return {"fatal error":
+              {"error message":"neither token nor 1Password account name provided. Unable to authenticate via 1Password."}}
+    if strToken is not None:
+      LogEntry("Using token-based authentication.",1)
+      try:
+        objClient = await Client.authenticate(auth=strToken,
+        integration_name=strScriptName,
+        integration_version=strVersion,)
+      except Exception as e:
+        LogEntry("Failed to authenticate with 1Password using the provided token. Error: {}".format(e),0,False)
+        LogEntry("Attempting Desktop Authentication as fallback. ",0,False)
+        try:
+          objClient = await Client.authenticate(
                 auth=DesktopAuth(account_name=strAccountName),
-            integration_name=strScriptName,
-            integration_version=strVersion,)
-    except Exception as e:
-        return {"fatal error": {"error message": f"Authentication failed. {e}"}}
+                integration_name=strScriptName,
+                integration_version=strVersion,)
+        except Exception as e:
+          return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. "
+                                    "Error: {}".format(e)}}
+    else:
+      # Connects to the 1Password desktop app.
+      LogEntry("No token provided. Using DesktopAuth for authentication. ",1)
+      try:
+        objClient = await Client.authenticate(
+              auth=DesktopAuth(account_name=strAccountName),
+              integration_name=strScriptName,
+              integration_version=strVersion,)
+      except Exception as e:
+        return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. Error: {}".format(e)}}
 
     LogEntry("Connected to 1Password",1)
 
     dictCollection = {}
     for key, item_spec in dictItemCollection.items():
-        strVaultID = item_spec["vault_id"]
-        strItemID = item_spec["item_id"]
-        try:
-            objItem = await objClient.items.get(strVaultID, strItemID)
-        except Exception as e:
-            return {"fatal error": {"error message": f"Failed to retrieve item {strItemID} from vault {strVaultID}. {e}"}}
-        dictItem = {}
+      strVaultID = item_spec["vault_id"]
+      strItemID = item_spec["item_id"]
+      try:
+        objItem = await objClient.items.get(strVaultID, strItemID)
+      except Exception as e:
+        return {"fatal error": {"error message": "Failed to retrieve item {0} from vault {1}. {2}".format(strItemID, strVaultID, e)}}
+      dictItem = {}
 
-        if hasattr(objItem, 'websites') and objItem.websites:
-            dictItem["urls"] = [website.url for website in objItem.websites]
-        dictItem["tags"] = objItem.tags
-        dictItem["notes"] = objItem.notes
-        for objItemField in objItem.fields:
-            if objItemField.field_type == "Totp":
-                dictItem["totp"] = objItemField
-            else:
-                dictItem[objItemField.title] = objItemField.value
-        dictCollection[key] = dictItem
+      if hasattr(objItem, 'websites') and objItem.websites:
+        dictItem["urls"] = [website.url for website in objItem.websites]
+      dictItem["tags"] = objItem.tags
+      dictItem["notes"] = objItem.notes
+      for objItemField in objItem.fields:
+        if objItemField.field_type == "Totp":
+          dictItem["totp"] = objItemField
+        else:
+          dictItem[objItemField.title] = objItemField.value
+      dictCollection[key] = dictItem
 
     return dictCollection
 
@@ -891,6 +899,7 @@ def main():
   global strMetricURL
   global strMetricToken
   global strMetricEndpoint
+  global strVersion
 
   dictProxies = {}
   strOutDir = None
@@ -1320,25 +1329,26 @@ def main():
       if os.path.isfile(strImportFile):
         lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,strAIsystem,objAIClient,strAIModel,iMaxTokens,",")
         LogEntry("Finished import, here are the results:",0)
-        strFilter = ""
+        strFilter = "sku:"
         for strSKU, dictResult in lstResults:
           if dictResult:
             if dictResult[0].get("Success"):
               LogEntry("SKU {} Successful".format(strSKU),0)
-              strFilter += "sku:{}|".format(strSKU)
+              strFilter += "{},".format(strSKU)
             else:
               LogEntry("SKU {} had an issue. Code: {}, error: {}".format(strSKU,dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
           else:
-             LogEntry("Something odd is going on. SKU {} does not have a valid result tupple".format(strSKU),0)
+             LogEntry("Something odd is going on. SKU {} does not have a valid result tuple".format(strSKU),0)
       else:
          LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
     else:
        LogEntry("Import File not defined, nothing to import",0)
+    if strFilter.endswith(","):
+      strFilter = strFilter[:-1]
     if strFilter == "":
       LogEntry("No products were successfully imported, so filter set to bogus product to skip next step.",0)
       strFilter = "sku:PRODIMPORTFAILED12345"
     LogEntry("Next up, applying attributes to the products we just imported...",0)
-
 
   if strAction == "FIX":
     # here is the fix function initialized
