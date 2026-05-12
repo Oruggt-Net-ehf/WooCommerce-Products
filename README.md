@@ -11,6 +11,28 @@ If you provide an ingestion host and source token for a metric server like Bette
 
 Also sentry reporting is integrated. You provide your DSN below or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
 
+There are four main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
+
+### Action directives
+
+#### Audit
+
+This action rolls through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has. During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
+
+#### Update
+
+Here the script actually compares the attributes found in the description and compares it to the attributes on the product. If it is already on the product as a local attributes, it gets upgraded to global. If it is not on the product at all it gets added. If it is already on the product as a global attributed, nothing is done. Any attribute on the product but not in the description are left alone.
+
+#### Fix
+
+This action filters products based on configuration items FixStatus, FixTag and FixCategory, that is it pulls all products in specified status, with specified tag and in specified categories and uses Claude AI model specified in config to generate a new product name, product description and short discription based on the current name, and if the current product description is short enough it is added to the prompt as well. The allowable length of description is specified in number of characters which is configured with MaxCharIn. This allows for putting additional details about the product in the description field so the prompt is more detailed, yet avoids sending a fully formed 1000 words description to the prompt.
+
+Recommendation is to only update products in draft state, with a specific tag and uncategorized. The fix tag specified gets removed from the product once successfully processed.
+
+#### Import
+
+Here you can
+
 Author Siggi Bjarnason 21 April 2026\
 Copyright 2026 Siggi Bjarnason
 

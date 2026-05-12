@@ -127,76 +127,76 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
     lstResults = []
 
     with open(strCSVPath, mode="r", newline="", encoding="utf-8-sig") as objCSVFile:
-        objCSVReader = csv.DictReader(objCSVFile, delimiter=strDelim)
-        for objRow in objCSVReader:
-            strSKU = (objRow.get("sku") or objRow.get("SKU") or "").strip()
-            if not strSKU:
-                LogEntry("Skipping objRow with missing SKU",0)
-                continue
-            LogEntry("Processing SKU: {}".format(strSKU),1)
-            strProdName = (objRow.get("Name") or "").strip()
-            strDescr = (objRow.get("Descr") or "").strip()
-            strBackorders = objRow.get("Allow Backorder", "")
-            if not strBackorders:
-                strBackorders = "no"
-            strAllowReviews = objRow.get("Enable Reviews", "")
-            if not strAllowReviews:
-                strAllowReviews = "no"
-            bAllowReviews = strAllowReviews.lower() == "true"
-            strQTY = objRow.get("Stock", "").strip()
-            strPrice = objRow.get("Price", "").strip()
-            strGTIN = objRow.get("EAN/GTIN", "").strip()
-            strBrand_asis = objRow.get("Brand", "").strip()
-            strBrand = objRow.get("Brand", "").strip().lower()
-            if strBrand in dictGlobalBrands:
-              dictBrandID = {}
-              dictBrandID["id"] = int(dictGlobalBrands[strBrand])
-              lstBrandID = [dictBrandID]
-              LogEntry("Brand {} has ID of {}".format(strBrand_asis,lstBrandID),3)
-            else:
-              LogEntry("Brand {} can't be found, attempting to create it".format(strBrand_asis),3)
-              iBrandID = CreateBrand(strBrand_asis, strBaseURL, strWCKey, strWCSecret)
-              LogEntry("Brand {} now exists as {}".format(strBrand_asis,iBrandID),3)
-              if iBrandID is not None:
-                dictGlobalBrands[strBrand] = int(iBrandID)
-                dictBrandID = {}
-                dictBrandID["id"] = iBrandID
-                lstBrandID = [dictBrandID]
-              else:
-                lstBrandID = []
+      objCSVReader = csv.DictReader(objCSVFile, delimiter=strDelim)
+      for objRow in objCSVReader:
+        strSKU = (objRow.get("sku") or objRow.get("SKU") or "").strip()
+        if not strSKU:
+          LogEntry("Skipping objRow with missing SKU",0)
+          continue
+        LogEntry("Processing SKU: {}".format(strSKU),1)
+        strProdName = (objRow.get("Name") or "").strip()
+        strDescr = (objRow.get("Descr") or "").strip()
+        strBackorders = objRow.get("Allow Backorder", "")
+        if not strBackorders:
+          strBackorders = "no"
+        strAllowReviews = objRow.get("Enable Reviews", "")
+        if not strAllowReviews:
+          strAllowReviews = "false"
+        bAllowReviews = strAllowReviews.lower() == "true" or strAllowReviews.lower() == "yes"
+        strQTY = objRow.get("Stock", "").strip()
+        strPrice = objRow.get("Price", "").strip()
+        strGTIN = objRow.get("EAN/GTIN", "").strip()
+        strBrand_asis = objRow.get("Brand", "").strip()
+        strBrand = objRow.get("Brand", "").strip().lower()
+        if strBrand in dictGlobalBrands:
+          dictBrandID = {}
+          dictBrandID["id"] = int(dictGlobalBrands[strBrand])
+          lstBrandID = [dictBrandID]
+          LogEntry("Brand {} has ID of {}".format(strBrand_asis,lstBrandID),3)
+        else:
+          LogEntry("Brand {} can't be found, attempting to create it".format(strBrand_asis),3)
+          iBrandID = CreateBrand(strBrand_asis, strBaseURL, strWCKey, strWCSecret)
+          LogEntry("Brand {} now exists as {}".format(strBrand_asis,iBrandID),3)
+          if iBrandID is not None:
+            dictGlobalBrands[strBrand] = int(iBrandID)
+            dictBrandID = {}
+            dictBrandID["id"] = iBrandID
+            lstBrandID = [dictBrandID]
+          else:
+            lstBrandID = []
 
-            LogEntry("Done with basics for SKU {}. Generating product details using AI.".format(strSKU),1)
+        LogEntry("Done with basics for SKU {}. Generating product details using AI.".format(strSKU),1)
 
-            strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
-            LogEntry("Generated product description for SKU {} with details: {}".format(strSKU, strProdDetails),1)
-            dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
+        strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
+        LogEntry("Generated product description for SKU {} with details: {}".format(strSKU, strProdDetails),1)
+        dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
-            dictProduct = {}
-            dictProduct["status"] = "pending"
-            dictProduct["name"] = dictResult["Product_Name"]
-            dictProduct["type"] = "simple"
-            dictProduct["sku"] = strSKU
-            dictProduct["description"] = dictResult["description"]
-            dictProduct["short_description"] = dictResult["short_description"]
-            dictProduct["backorders"] = strBackorders
-            dictProduct["regular_price"] = strPrice if strPrice else None
-            dictProduct["reviews_allowed"] = bAllowReviews
-            dictProduct["manage_stock"] = True
-            dictProduct["global_unique_id"] = strGTIN
-            dictProduct["brands"] = lstBrandID
-            dictProduct["stock_quantity"] = int(strQTY)
+        dictProduct = {}
+        dictProduct["status"] = "pending"
+        dictProduct["name"] = dictResult["Product_Name"]
+        dictProduct["type"] = "simple"
+        dictProduct["sku"] = strSKU
+        dictProduct["description"] = dictResult["description"]
+        dictProduct["short_description"] = dictResult["short_description"]
+        dictProduct["backorders"] = strBackorders
+        dictProduct["regular_price"] = strPrice if strPrice else None
+        dictProduct["reviews_allowed"] = bAllowReviews
+        dictProduct["manage_stock"] = True
+        dictProduct["global_unique_id"] = strGTIN
+        dictProduct["brands"] = lstBrandID
+        dictProduct["stock_quantity"] = int(strQTY)
 
-            # Remove None values so payload stays clean
-            dictCleaned = {}
-            for strKey, strValue in dictProduct.items():
-                if strValue is not None:
-                    dictCleaned[strKey] = strValue
-            dictProduct = dictCleaned
+        # Remove None values so payload stays clean
+        dictCleaned = {}
+        for strKey, strValue in dictProduct.items():
+            if strValue is not None:
+                dictCleaned[strKey] = strValue
+        dictProduct = dictCleaned
 
-            LogEntry("Creating product",1)
+        LogEntry("Creating product",1)
 
-            dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
-            lstResults.append((strSKU, dictResult))
+        dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
+        lstResults.append((strSKU, dictResult))
 
     return lstResults
 
@@ -986,13 +986,14 @@ def main():
   iActionCount = sum([bAudit, bUpdate, bImport, bFix])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, or --fix can be used.",0,True)
-  elif iActionCount == 0:
+             "Only one of --audit, --update, --import, or --fix can be used.",0)
+    iActionCount = 0
+  if iActionCount == 0:
     strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT or FIX: ")
     strAction = strAction.upper()
     if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
-  else:
+  if iActionCount == 1:
     # Determine and set the action string
     if bAudit:
       strAction = "AUDIT"
