@@ -12,7 +12,7 @@ Secret management is by default handled by 1Password (either in account mode or 
 
 If you provide an ingestion host and source token for a metric server like Better Stack telemetry server, the token consumption from each fix and import action will be logged there.
 
-Also sentry reporting is integrated. You provide your DSN below or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
+Also sentry reporting is integrated. You provide your DSN in the configuration file or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
 
 There are four main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
 
@@ -20,11 +20,13 @@ There are four main actions this script can take. You can specify the desired ac
 
 ### Audit
 
-This action rolls through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has. During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
+This action goes through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has and writes it to a csv file along with name, sku and product id.
+
+During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
 
 ### Update
 
-Here the script actually compares the attributes found in the description and compares it to the attributes on the product. If it is already on the product as a local attributes, it gets upgraded to global. If it is not on the product at all it gets added. If it is already on the product as a global attributed, nothing is done. Any attribute on the product but not in the description are left alone.
+This action goes through all the products that match the filter condition specified in the configuration file. Here though, the script actually compares the attributes found in the description and compares it to the attributes on the product. If it is already on the product as a local attributes, it gets upgraded to global. If it is not on the product at all it gets added. If it is already on the product as a global attributed, it is left alone. Any attribute on the product but not in the description are left alone.
 
 ### Fix
 
@@ -43,9 +45,9 @@ Teltonika,RUT241000000,4.77905E+12,RUT241 LTE Cat 4 Router,Popular router,37831,
 Anker,A1263 ,8.48061E+11,PowerCore 10000,the purple one,5795,8,notify,FALSE
 ```
 
-"Allow Backorder" and "Enable Reviews" allowed values are per the WooCommerce REST API specifications. Backorders allowed values are "yes", "no" and notify; reviews_allowed (Enable Reviews) is a simple boolean.
+"Allow Backorder" and "Enable Reviews" allowed values are per the WooCommerce REST API specifications. Backorders allowed values are "yes", "no" and "notify"; reviews_allowed (Enable Reviews) is a simple boolean.
 
-Brand and sku is also known as make and model. EAN/GTIN is the global product number often found on barcodes, UPC is a form of a GTIN. Name is product name and descr is additional details about the product, keep it short (less than 100 char). Price is a float and stock is an integer.
+Brand and sku is also known as make and model. EAN/GTIN is the global product number often found on barcodes, UPC is a form of a GTIN. Name is the product name and descr is additional details about the product, keep it short (less than 100 char). Price is a float and stock is an integer.
 
 Brand, sku, Name and descr is then combined (space deliminated) to form the AI prompt.
 
