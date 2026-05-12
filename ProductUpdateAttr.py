@@ -133,7 +133,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             if not strSKU:
                 LogEntry("Skipping objRow with missing SKU",0)
                 continue
-
+            LogEntry("Processing SKU: {}".format(strSKU),1)
             strProdName = (objRow.get("Name") or "").strip()
             strDescr = (objRow.get("Descr") or "").strip()
             strBackorders = objRow.get("Allow Backorder", "")
@@ -165,7 +165,10 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
               else:
                 lstBrandID = []
 
+            LogEntry("Done with basics for SKU {}. Generating product details using AI.".format(strSKU),1)
+
             strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
+            LogEntry("Generated product description for SKU {} with details: {}".format(strSKU, strProdDetails),1)
             dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
             dictProduct = {}
@@ -189,6 +192,8 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
                 if strValue is not None:
                     dictCleaned[strKey] = strValue
             dictProduct = dictCleaned
+
+            LogEntry("Creating product",1)
 
             dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
             lstResults.append((strSKU, dictResult))
