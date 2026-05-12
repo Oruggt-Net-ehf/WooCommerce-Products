@@ -1,5 +1,8 @@
 # WooCommerce Products
 
+Author Siggi Bjarnason 21 April 2026\
+Copyright 2026 Siggi Bjarnason
+
 ## Introductions
 
 Script that analyzes product description in WooCommerce and turns a spec list into attributes.
@@ -13,28 +16,40 @@ Also sentry reporting is integrated. You provide your DSN below or put it in env
 
 There are four main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
 
-### Action directives
+## Action directives
 
-#### Audit
+### Audit
 
 This action rolls through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has. During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
 
-#### Update
+### Update
 
 Here the script actually compares the attributes found in the description and compares it to the attributes on the product. If it is already on the product as a local attributes, it gets upgraded to global. If it is not on the product at all it gets added. If it is already on the product as a global attributed, nothing is done. Any attribute on the product but not in the description are left alone.
 
-#### Fix
+### Fix
 
 This action filters products based on configuration items FixStatus, FixTag and FixCategory, that is it pulls all products in specified status, with specified tag and in specified categories and uses Claude AI model specified in config to generate a new product name, product description and short discription based on the current name, and if the current product description is short enough it is added to the prompt as well. The allowable length of description is specified in number of characters which is configured with MaxCharIn. This allows for putting additional details about the product in the description field so the prompt is more detailed, yet avoids sending a fully formed 1000 words description to the prompt.
 
 Recommendation is to only update products in draft state, with a specific tag and uncategorized. The fix tag specified gets removed from the product once successfully processed.
 
-#### Import
+### Import
 
-Here you can
+Here you can import new product based on a CSV file and have Claude AI generate the description. Here is a sample content (from SampleImport.csv)
 
-Author Siggi Bjarnason 21 April 2026\
-Copyright 2026 Siggi Bjarnason
+``` CSV
+Brand,sku,EAN/GTIN,Name,Descr,Price,Stock,Allow Backorder,Enable Reviews
+MikroTik,MA53UG+HbeH,4.75222E+12,hAP be³ Media,Latest Wifi 7 router from MikroTik,28461.6,10,notify,FALSE
+Teltonika,RUT241000000,4.77905E+12,RUT241 LTE Cat 4 Router,Popular router,37831,15,notify,FALSE
+Anker,A1263 ,8.48061E+11,PowerCore 10000,the purple one,5795,8,notify,FALSE
+```
+
+"Allow Backorder" and "Enable Reviews" allowed values are per the WooCommerce REST API specifications. Backorders allowed values are "yes", "no" and notify; reviews_allowed (Enable Reviews) is a simple boolean.
+
+Brand and sku is also known as make and model. EAN/GTIN is the global product number often found on barcodes, UPC is a form of a GTIN. Name is product name and descr is additional details about the product, keep it short (less than 100 char). Price is a float and stock is an integer.
+
+Brand, sku, Name and descr is then combined (space deliminated) to form the AI prompt.
+
+## Operational details
 
 Following packages need to be installed
 
@@ -46,7 +61,7 @@ pip install asyncio\
 pip install beautifulsoup4\
 pip install anthropic
 
-## CLI Explained
+### CLI Explained
 
 `usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
 
@@ -65,7 +80,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
   `-o, --outdir OUTDIR`  Output directory for generated files. Optional. Defaults to folder named output in the script directory\
   `-i, --input INPUT`    Input file for product import action, overrides config file setting for import file
 
-## Configuration file explained
+### Configuration file explained
 
 `[Generic]`\
 `AuthMethod = 1Password` or `Env` *(only first three characters are relevant, not case sensitive)*\
@@ -102,7 +117,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `APIKeyField = credential` *(The name of the field or env variable with the AI API key)*\
 `MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Source Token)*
 
-## Attribute Substitution
+### Attribute Substitution
 
 Certain attributes in the text are needlessly long, here you can replace them with something shorter and nicer. It's just a semicolon separate line with the original name first then followed by the new line. Put as many lines as you need into a single csv file and put the name in the AttrEqFile configuration item above.
 
