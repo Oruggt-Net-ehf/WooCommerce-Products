@@ -1320,10 +1320,12 @@ def main():
       if os.path.isfile(strImportFile):
         lstResults = CreateWooCommerceProductsFromCSV(strImportFile,strBaseURL,strWCKey,strWCSecret,strAIsystem,objAIClient,strAIModel,iMaxTokens,",")
         LogEntry("Finished import, here are the results:",0)
+        strFilter = ""
         for strSKU, dictResult in lstResults:
           if dictResult:
             if dictResult[0].get("Success"):
               LogEntry("SKU {} Successful".format(strSKU),0)
+              strFilter += "sku:{}|".format(strSKU)
             else:
               LogEntry("SKU {} had an issue. Code: {}, error: {}".format(strSKU,dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
           else:
@@ -1332,6 +1334,9 @@ def main():
          LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
     else:
        LogEntry("Import File not defined, nothing to import",0)
+    if strFilter == "":
+      LogEntry("No products were successfully imported, so filter set to bogus product to skip next step.",0)
+      strFilter = "sku:PRODIMPORTFAILED12345"
     LogEntry("Next up, applying attributes to the products we just imported...",0)
 
 
@@ -1382,11 +1387,6 @@ def main():
   if strAction == "UPDATE": # Only update published products
     dictParams["status"] = "publish"
     LogEntry("For update action, only fetching published products in addition to any other filters specified",0)
-  if strAction == "IMPORT": # For the products we just imported we want to apply attributes as if it was an update
-    dictParams = {}
-    dictParams["per_page"] = iPerPage
-    dictParams["status"] = "pending"
-    LogEntry("For import action, only fetching products with pending status to apply attributes, ignoring all other filters",0)
 
   lstProductFailure = []
   while iProdCount > 0:
