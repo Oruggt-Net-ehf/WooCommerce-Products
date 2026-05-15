@@ -931,6 +931,10 @@ def main():
   objParser.add_argument("--fix", dest="fix",
                       action="store_true", help="Action directive. Fix product descriptions."
                       "Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--mikrotik", dest="mikrotik",
+                      action="store_true", help="Action directive. Update stock level with Mikrotik."
+                      "Required unless you specify another action, only one action can be specified.")
+
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
@@ -972,6 +976,7 @@ def main():
   bUpdate = objArgs.update
   bImport = objArgs.prodimport
   bFix = objArgs.fix
+  bMikrotik = objArgs.mikrotik
 
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
@@ -989,9 +994,9 @@ def main():
              "Only one of --audit, --update, --import, or --fix can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
-    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT or FIX: ")
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX or MIKROTIK: ")
     strAction = strAction.upper()
-    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX"]:
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "MIKROTIK"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
   if iActionCount == 1:
     # Determine and set the action string
@@ -1003,6 +1008,8 @@ def main():
       strAction = "IMPORT"
     elif bFix:
       strAction = "FIX"
+    elif bMikrotik:
+      strAction = "MIKROTIK"
 
   LogEntry("Selected action: {}".format(strAction),0)
 
@@ -1356,6 +1363,9 @@ def main():
       strFilter = "sku:PRODIMPORTFAILED12345"
     LogEntry("Next up, applying attributes to the products we just imported...",0)
 
+  if strAction == "MIKROTIK":
+    LogEntry("Making sure no filter is applied for MikroTik action",0)
+    strFilter = None
   if strAction == "FIX":
     # here is the fix function initialized
     strFilter = ""
@@ -1431,6 +1441,21 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
+      iMikroTikCategoryID = dictGlobalCategories.get("mikrotik", None)
+      strBrand = "No Brand"
+      dictBrands = dictProduct["brands"]
+      if isinstance(dictBrands, list):
+         if len(dictBrands) > 0:
+            strBrand = dictBrands[0]["name"]
+      if strAction == "MIKROTIK":
+        if strBrand == "MikroTik" or iMikroTikCategoryID in dictProduct["categories"]:
+          LogEntry("Product {} is a MikroTik product, with category {} updating stock level from Mikrotik API.".format(dictProduct["id"], dictProduct["categories"]),0)
+          #dictResult = UpdateStockFromMikrotik(dictProduct, strBaseURL, strWCKey, strWCSecret)
+          if dictResult[0]["Success"]:
+            LogEntry("Successfully updated stock for product {}.".format(dictProduct["id"]),0)
+          else:
+            LogEntry("Failed to update stock for product {}. "
+                      "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
       if strAction == "FIX":
         # Actual fix action
         lstCleanTags = []
@@ -1508,11 +1533,6 @@ def main():
             LogEntry("Failed to update product {} with new attributes. "
                       "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
-      strBrand = "No Brand"
-      dictBrands = dictProduct["brands"]
-      if isinstance(dictBrands, list):
-         if len(dictBrands) > 0:
-            strBrand = dictBrands[0]["name"]
       if strAction == "AUDIT":
         # write out the audit file
         objFileOut.write("{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
