@@ -1452,7 +1452,7 @@ def main():
         strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
         strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
         strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
-        dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "name": strNewName,
+        dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
           "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
         LogEntry("Finished updating description for product {}. Now extracting attributes from new description to update attributes if needed.".format(dictProduct["id"]),0)
         dictAttributes = ExtractTwoColumnTables(strNewDesc)
