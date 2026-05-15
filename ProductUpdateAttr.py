@@ -988,10 +988,10 @@ def main():
   LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
-  iActionCount = sum([bAudit, bUpdate, bImport, bFix])
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, or --fix can be used.",0)
+             "Only one of --audit, --update, --import, --fix or --mikrotik can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
     strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX or MIKROTIK: ")
@@ -1437,25 +1437,33 @@ def main():
         continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
-      LogEntry("Working on product {} with SKU {} and name {}. "
+      if strAction != "MIKROTIK":
+        LogEntry("Working on product {} with SKU {} and name {}. "
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
-      iMikroTikCategoryID = dictGlobalCategories.get("mikrotik", None)
+      lstCategories = dictProduct.get("categories", [])
+      lstCatName = []
+      bMikrotikCat = False
+
+      for dictCategory in lstCategories:
+        lstCatName.append(dictCategory["name"])
+        if dictCategory["name"] == "MikroTik Products":
+          bMikrotikCat = True
       strBrand = "No Brand"
-      dictBrands = dictProduct["brands"]
-      if isinstance(dictBrands, list):
-         if len(dictBrands) > 0:
-            strBrand = dictBrands[0]["name"]
+      lstBrands = dictProduct["brands"]
+      if isinstance(lstBrands, list):
+         if len(lstBrands) > 0:
+            strBrand = lstBrands[0]["name"]
       if strAction == "MIKROTIK":
-        if strBrand == "MikroTik" or iMikroTikCategoryID in dictProduct["categories"]:
-          LogEntry("Product {} is a MikroTik product, with category {} updating stock level from Mikrotik API.".format(dictProduct["id"], dictProduct["categories"]),0)
-          #dictResult = UpdateStockFromMikrotik(dictProduct, strBaseURL, strWCKey, strWCSecret)
-          if dictResult[0]["Success"]:
-            LogEntry("Successfully updated stock for product {}.".format(dictProduct["id"]),0)
-          else:
-            LogEntry("Failed to update stock for product {}. "
-                      "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+        if strBrand == "MikroTik" and bMikrotikCat and dictProduct["stock_quantity"] > 0:
+          LogEntry("Product {} - {} is a MikroTik product, stock level: {}.".format(dictProduct["sku"], dictProduct["name"], dictProduct["stock_quantity"]),0)
+        #dictResult = UpdateStockFromMikrotik(dictProduct, strBaseURL, strWCKey, strWCSecret)
+        #if dictResult[0]["Success"]:
+        #  LogEntry("Successfully updated stock for product {}.".format(dictProduct["id"]),0)
+        #else:
+        #  LogEntry("Failed to update stock for product {}. "
+        #            "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
       if strAction == "FIX":
         # Actual fix action
         lstCleanTags = []
