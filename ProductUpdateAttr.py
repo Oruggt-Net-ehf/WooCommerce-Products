@@ -910,6 +910,7 @@ def main():
   strOutDir = None
   objFileOut = None
   strAccountName = None
+  strMikrotikToken = None
 
   strDefAImodel = "claude-sonnet-4-6"
 
@@ -1148,20 +1149,43 @@ def main():
   else:
     LogEntry("section Generic not found in config",0)
 
+  if "MikrotikCreds" in objConfig:
+    if strAuthMethod == "1pa":
+      if "VaultID" in objConfig["MikrotikCreds"]:
+        strMTVaultID = objConfig["MikrotikCreds"]["VaultID"]
+      else:
+        LogEntry("MikroTik VaultID not found in config",0)
+      if "ItemID" in objConfig["MikrotikCreds"]:
+        strMTItemID = objConfig["MikrotikCreds"]["ItemID"]
+      else:
+        LogEntry("MikroTik ItemID not found in config",0)
+    if "TokenField" in objConfig["MikrotikCreds"]:
+      strMTAPIKeyField = objConfig["MikrotikCreds"]["TokenField"]
+    else:
+      LogEntry("MikroTik TokenField not found in config",0)
+    if "HostField" in objConfig["MikrotikCreds"]:
+      strMTURLField = objConfig["MikrotikCreds"]["HostField"]
+    else:
+      LogEntry("MikroTik HostField not found in config",0)
+
+  else:
+    LogEntry("section MikrotikCreds not found in config",0)
+
+
   if "AICreds" in objConfig:
     if strAuthMethod == "1pa":
       if "VaultID" in objConfig["AICreds"]:
         strAIVaultID = objConfig["AICreds"]["VaultID"]
       else:
-        LogEntry("VaultID not found in config",0)
+        LogEntry("AI VaultID not found in config",0)
       if "ItemID" in objConfig["AICreds"]:
         strAIItemID = objConfig["AICreds"]["ItemID"]
       else:
-        LogEntry("ItemID not found in config",0)
+        LogEntry("AI ItemID not found in config",0)
     if "APIKeyField" in objConfig["AICreds"]:
       strAIAPIKeyField = objConfig["AICreds"]["APIKeyField"]
     else:
-      LogEntry("APIKeyField not found in config, setting default to {}".format(strDefAIenvName),0)
+      LogEntry("AI APIKeyField not found in config, setting default to {}".format(strDefAIenvName),0)
       strAIAPIKeyField = strDefAIenvName
     if "MetricTokenField" in objConfig["AICreds"]:
       strMetricTokenField = objConfig["AICreds"]["MetricTokenField"]
@@ -1175,23 +1199,23 @@ def main():
       if "VaultID" in objConfig["WPCreds"]:
         strVaultID = objConfig["WPCreds"]["VaultID"]
       else:
-        LogEntry("VaultID not found in config",0)
+        LogEntry("WP VaultID not found in config",0)
       if "ItemID" in objConfig["WPCreds"]:
         strItemID = objConfig["WPCreds"]["ItemID"]
       else:
-        LogEntry("ItemID not found in config",0)
+        LogEntry("WP ItemID not found in config",0)
     if "ConsumerKeyField" in objConfig["WPCreds"]:
       strConsumerKeyField = objConfig["WPCreds"]["ConsumerKeyField"]
     else:
-      LogEntry("ConsumerKeyField not found in config",0)
+      LogEntry("WP ConsumerKeyField not found in config",0)
     if "ConsumerSecretField" in objConfig["WPCreds"]:
       strConsumerSecretField = objConfig["WPCreds"]["ConsumerSecretField"]
     else:
-      LogEntry("ConsumerSecretField not found in config",0)
+      LogEntry("WP ConsumerSecretField not found in config",0)
     if "BaseURLField" in objConfig["WPCreds"]:
       strBaseURLField = objConfig["WPCreds"]["BaseURLField"]
     else:
-      LogEntry("BaseURLField not found in config",0)
+      LogEntry("WP BaseURLField not found in config",0)
   else:
     LogEntry("section WPCreds not found in config",0)
 
@@ -1264,6 +1288,13 @@ def main():
     dictItemSpecs["item_id"] = strAIItemID
     dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemCollection["AICreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemSpecs["vault_id"] = strMTVaultID
+    dictItemSpecs["item_id"] = strMTItemID
+    dictItemSpecs["metric_key"] = strMetricTokenField
+    dictItemSpecs["HostField"] = strMTURLField
+    dictItemCollection["MikrotikCreds"] = dictItemSpecs
+
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
       strAccountName, "provided" if str1PassToken else "not provided"),0)
@@ -1286,6 +1317,10 @@ def main():
     dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemSpecs["AISecret"] = strAIAPIKeyField
     dictItemCollection["AICreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemSpecs["MTSecret"] = strMTAPIKeyField
+    dictItemSpecs["HostField"] = strMTURLField
+    dictItemCollection["MikrotikCreds"] = dictItemSpecs
 
     dictReturn = GetEnvCreds(dictItemCollection)
 
@@ -1297,6 +1332,8 @@ def main():
   strWCSecret = dictReturn["WCreds"].get(strConsumerSecretField)
   strAIAPIKey = dictReturn["AICreds"].get(strAIAPIKeyField)
   strMetricToken = dictReturn["AICreds"].get(strMetricTokenField)
+  strMikrotikToken = dictReturn["MikrotikCreds"].get(strMTAPIKeyField)
+  strMikroTikURL = dictReturn["MikrotikCreds"].get(strMTURLField)
 
   if not strBaseURL or not strWCKey or not strWCSecret:
     LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
@@ -1415,6 +1452,7 @@ def main():
     LogEntry("For update action, only fetching published products in addition to any other filters specified",0)
 
   lstProductFailure = []
+  lstReport = []
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
@@ -1442,28 +1480,18 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
-      lstCategories = dictProduct.get("categories", [])
-      lstCatName = []
-      bMikrotikCat = False
-
-      for dictCategory in lstCategories:
-        lstCatName.append(dictCategory["name"])
-        if dictCategory["name"] == "MikroTik Products":
-          bMikrotikCat = True
       strBrand = "No Brand"
       lstBrands = dictProduct["brands"]
       if isinstance(lstBrands, list):
          if len(lstBrands) > 0:
             strBrand = lstBrands[0]["name"]
       if strAction == "MIKROTIK":
-        if strBrand == "MikroTik" and bMikrotikCat and dictProduct["stock_quantity"] > 0:
+        if strBrand == "MikroTik" and dictProduct["stock_quantity"] > 0:
           LogEntry("Product {} - {} is a MikroTik product, stock level: {}.".format(dictProduct["sku"], dictProduct["name"], dictProduct["stock_quantity"]),0)
-        #dictResult = UpdateStockFromMikrotik(dictProduct, strBaseURL, strWCKey, strWCSecret)
-        #if dictResult[0]["Success"]:
-        #  LogEntry("Successfully updated stock for product {}.".format(dictProduct["id"]),0)
-        #else:
-        #  LogEntry("Failed to update stock for product {}. "
-        #            "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+          dictReportItem = {}
+          dictReportItem["code"] = dictProduct["sku"]
+          dictReportItem["count"] = dictProduct["stock_quantity"]
+          lstReport.append(dictReportItem)
       if strAction == "FIX":
         # Actual fix action
         lstCleanTags = []
@@ -1547,6 +1575,14 @@ def main():
             dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
+  if strAction == "MIKROTIK":
+    dictHeader = {}
+    dictHeader["Content-Type"] = "application/json"
+    dictUpdate = {}
+    dictUpdate["apiKey"] = strMikrotikToken
+    dictUpdate["report"] = lstReport
+    dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
+    LogEntry("MikroTik API response: {}".format(dictResponse),0)
   if objFileOut is not None:
     objFileOut.close()
     LogEntry("Audit file {} closed".format(strOutFileName),0)
