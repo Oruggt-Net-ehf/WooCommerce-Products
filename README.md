@@ -5,8 +5,11 @@ Copyright 2026 Siggi Bjarnason
 
 ## Introductions
 
-Script that analyzes product description in WooCommerce and turns a spec list into attributes.
+Script that analyzes product description in WooCommerce and turns a spec list into attributes. It does this by looking for a two column table treating the first column as the attribute and the second column as the value.
+
 Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
+
+Since I'm a MikroTik master distributor and I have a requirement to sent stock reports back to HQ I also added an function that can find all the MikroTik products, take the stock and sku from WooCommerce and send it to the MikroTik API.
 
 Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
 
@@ -14,7 +17,9 @@ If you provide an ingestion host and source token for a metric server like Bette
 
 Also sentry reporting is integrated. You provide your DSN in the configuration file or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
 
-There are four main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
+Heartbeat is also supported if you support a heartbeat URL in the config file
+
+There are five main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
 
 ## Action directives
 
@@ -102,6 +107,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `IngestionHost = xxxx.yyyy.betterstackdata.com` *(Provide your Better Stack or other OpenMetric ingesting host here.)*\
 `MetricEndpoint = metrics` *(The endpoint to post the metrics to. For Better stack the pattern is schema+igestionhost+"metrics" or `https://xxxx.yyyy.betterstackdata.com/metrics` defaults to "metrics" if not supplied)*\
 `SentryDSN = https://asdfjælasjdflæajsdlfjlaj@xxxxyyyxxx.eu-fsn-3.betterstackdata.com/123564` *(Your sentry DSN, leave this blank to disable Sentry)*\
+`HeartBeatURL = https://uptime.betterstack.com/api/v1/heartbeat/q49e2LCdamHxyzabcRRozhALb` *(Heartbeat URL, optional)*\
 `OutDir = c:\temp` *(The directory where all write operations should take place)*\
 `ImportFile = c:\temp\myimportfile.csv` *(Full path of the import file needed for import operations)*\
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\
@@ -123,6 +129,12 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `APIKeyField = credential` *(The name of the field or env variable with the AI API key)*\
 `MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Source Token)*
+
+`[MikrotikCreds]` *(This section is only needed if you intend to use the MikroTik function)*\
+`VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
+`TokenField = credential` *(The name of the field or env variable with the MikroTik API key)*\
+`HostField = hostname` *(The name of the field or env variable holding the URL to post the stock update to)*\
 
 ### Attribute Substitution
 

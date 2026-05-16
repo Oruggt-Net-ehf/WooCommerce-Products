@@ -527,7 +527,7 @@ def CleanExit(strCause,bLog=True):
     objFileOut.close()
     LogEntry("objFileOut closed", 1)
   objLogOut.close()
-  print("objLogOut closed")
+  print("Log file {} closed".format(strLogFile))
 
   #sentry_sdk.capture_exception(Exception(strCause))
   sys.exit(9)
@@ -905,6 +905,7 @@ def main():
   global strMetricToken
   global strMetricEndpoint
   global strVersion
+  global strLogFile
 
   dictProxies = {}
   strOutDir = None
@@ -970,6 +971,7 @@ def main():
   iLoc = strScriptName.rfind(".")
 
   strLogFile = strLogDir + strScriptName[:iLoc] + ISO + ".log"
+  print ("Logging to file: {}".format(strLogFile))
   objLogOut = GetFileHandle(strLogFile, "w")
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
@@ -1087,6 +1089,10 @@ def main():
       strAIModel = objConfig["Generic"]["AIModel"]
     else:
       strAIModel = strDefAImodel
+    if "HeartBeatURL" in objConfig["Generic"]:
+      strHeartBeatURL = objConfig["Generic"]["HeartBeatURL"]
+    else:
+      strHeartBeatURL = None
     if "IngestionHost" in objConfig["Generic"]:
       strMetricURL = objConfig["Generic"]["IngestionHost"]
     else:
@@ -1144,7 +1150,7 @@ def main():
       if isInt(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
       else:
-        LogEntry("PerPage value in config is not an integer, defaulting to 25",0)
+        LogEntry("PerPage value in config is not an integer, defaulting to {}".format(iDefPerPage),0)
         iPerPage = iDefPerPage
   else:
     LogEntry("section Generic not found in config",0)
@@ -1155,19 +1161,22 @@ def main():
         strMTVaultID = objConfig["MikrotikCreds"]["VaultID"]
       else:
         LogEntry("MikroTik VaultID not found in config",0)
+        strMTVaultID = None
       if "ItemID" in objConfig["MikrotikCreds"]:
         strMTItemID = objConfig["MikrotikCreds"]["ItemID"]
       else:
         LogEntry("MikroTik ItemID not found in config",0)
+        strMTItemID = None
     if "TokenField" in objConfig["MikrotikCreds"]:
       strMTAPIKeyField = objConfig["MikrotikCreds"]["TokenField"]
     else:
       LogEntry("MikroTik TokenField not found in config",0)
+      strMTAPIKeyField = None
     if "HostField" in objConfig["MikrotikCreds"]:
       strMTURLField = objConfig["MikrotikCreds"]["HostField"]
     else:
       LogEntry("MikroTik HostField not found in config",0)
-
+      strMTURLField = None
   else:
     LogEntry("section MikrotikCreds not found in config",0)
 
@@ -1178,10 +1187,12 @@ def main():
         strAIVaultID = objConfig["AICreds"]["VaultID"]
       else:
         LogEntry("AI VaultID not found in config",0)
+        strAIVaultID = None
       if "ItemID" in objConfig["AICreds"]:
         strAIItemID = objConfig["AICreds"]["ItemID"]
       else:
         LogEntry("AI ItemID not found in config",0)
+        strAIItemID = None
     if "APIKeyField" in objConfig["AICreds"]:
       strAIAPIKeyField = objConfig["AICreds"]["APIKeyField"]
     else:
@@ -1212,10 +1223,12 @@ def main():
       strConsumerSecretField = objConfig["WPCreds"]["ConsumerSecretField"]
     else:
       LogEntry("WP ConsumerSecretField not found in config",0)
+      strConsumerSecretField = None
     if "BaseURLField" in objConfig["WPCreds"]:
       strBaseURLField = objConfig["WPCreds"]["BaseURLField"]
     else:
       LogEntry("WP BaseURLField not found in config",0)
+      strBaseURLField = None
   else:
     LogEntry("section WPCreds not found in config",0)
 
@@ -1575,7 +1588,7 @@ def main():
             dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
         objFileOut.flush()
 
-  if strAction == "MIKROTIK":
+  if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
     dictHeader = {}
     dictHeader["Content-Type"] = "application/json"
     dictUpdate = {}
@@ -1587,10 +1600,12 @@ def main():
     objFileOut.close()
     LogEntry("Audit file {} closed".format(strOutFileName),0)
 
-  LogEntry("Finished fetching products. Total products fetched: {}".format(iTotalProducts),0)
+  WebResponse = MakeAPICall(strHeartBeatURL,{},"HEAD")
 
+  LogEntry("Finished processing products. Total products fetched: {}".format(iTotalProducts),0)
+  LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
   objLogOut.close()
-  print("objLogOut closed")
+  print("Log file {} closed".format(strLogFile))
 
 
 
