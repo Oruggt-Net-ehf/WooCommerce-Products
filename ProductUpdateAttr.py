@@ -1589,6 +1589,7 @@ def main():
         objFileOut.flush()
 
   if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
+    LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikURL, len(lstReport)),0)
     dictHeader = {}
     dictHeader["Content-Type"] = "application/json"
     dictUpdate = {}
@@ -1600,10 +1601,12 @@ def main():
     objFileOut.close()
     LogEntry("Audit file {} closed".format(strOutFileName),0)
 
-  WebResponse = MakeAPICall(strHeartBeatURL,{},"HEAD")
+  if strHeartBeatURL:
+    WebResponse = MakeAPICall(strHeartBeatURL,{},"HEAD")
+    LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
 
   LogEntry("Finished processing products. Total products fetched: {}".format(iTotalProducts),0)
-  LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
+
   objLogOut.close()
   print("Log file {} closed".format(strLogFile))
 
