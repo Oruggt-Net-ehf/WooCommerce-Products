@@ -27,6 +27,7 @@ import argparse
 import configparser
 import csv
 import asyncio
+import traceback
 import platform
 import urllib.parse as urlLib
 from onepassword import Client, DesktopAuth
@@ -42,12 +43,34 @@ iTotalSleep = 0
 iTimeOut = 180  # Max time in seconds to wait for network response
 iMinQuiet = 10  # Minimum time in seconds between API calls
 strDefAIenvName = "ANTHROPIC_API_KEY" # Name of the environment variable where the AI key is stored, if using env variable for auth
+strDefAImodel = "claude-sonnet-4-6"
 strDefMetricEndPoint = "metrics" # Endpoint to submit metrics to, appended to the ingestion host
 strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where the 1Password token is stored, if using token for auth
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
 
+def CustomExcepthook(clsType, objValue, objTraceback):
+  strLocation = GetExceptionLocation(objTraceback)
+  CleanExit("unhandled exception: {} at {}. Details: {}".format(clsType, strLocation, objValue), bLog=True)
+  sys.__excepthook__(clsType, objValue, objTraceback)
+
+sys.excepthook = CustomExcepthook
+
 # sub defs
+
+def GetExceptionLocation(objTraceback)->str:
+  objTB = traceback.extract_tb(objTraceback)
+
+  objMyFrame = None
+  for objFrame in reversed(objTB):
+    if os.path.basename(objFrame.filename) == strScriptName:
+      objMyFrame = objFrame
+      break
+
+  if objMyFrame:
+    return "line {} in {}".format(objMyFrame.lineno, objMyFrame.name)
+  else:
+    return "unknown location"
 
 def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strModel:str, iMaxToken:int)->dict:
   """
@@ -428,86 +451,89 @@ def GetEnvCreds(dictCollectionIn):
     return dictCollection
 
 async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
-    """
-    Handles fetching items from 1Password based on the provided collection of item specifications.
-    It supports both token-based authentication and desktop app authentication.
-    Parameters:
-    dictItemCollection: A dictionary of dictionaries, containing the specifications for the items to fetch.
-                        Inner dictionaries should have the keys "vault_id" and "item_id" to specify
-                        the vault and item to fetch. The outer dictionary's keys are used as identifiers
-                        for the fetched items in the returned dictionary.
-    strAccountName: The name of the 1Password account to use for authentication
-                    in case of desktop app authentication.
-    strToken: The token to use for token-based authentication.
-    Returns: A dictionary of dictionaries containing the fetched items or an error message in case of failure.
-                The structure of the returned dictionary is as follows:
-                {
-                    "item_identifier": {
-                        "urls": [list of URLs associated with the item],
-                        "tags": [list of tags associated with the item],
-                        "notes": notes associated with the item,
-                        "totp": TOTP field value if present,
-                        "field_title_1": field_value_1,
-                        "field_title_2": field_value_2,
-                        ...
-                    },
-                    ...
-    """
-    if not strAccountName and not strToken:
-      return {"fatal error":
-              {"error message":"neither token nor 1Password account name provided. Unable to authenticate via 1Password."}}
-    if strToken is not None:
-      LogEntry("Using token-based authentication.",1)
-      try:
-        objClient = await Client.authenticate(auth=strToken,
-        integration_name=strScriptName,
-        integration_version=strVersion,)
-      except Exception as e:
-        LogEntry("Failed to authenticate with 1Password using the provided token. Error: {}".format(e),0,False)
-        LogEntry("Attempting Desktop Authentication as fallback. ",0,False)
-        try:
-          objClient = await Client.authenticate(
-                auth=DesktopAuth(account_name=strAccountName),
-                integration_name=strScriptName,
-                integration_version=strVersion,)
-        except Exception as e:
-          return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. "
-                                    "Error: {}".format(e)}}
-    else:
-      # Connects to the 1Password desktop app.
-      LogEntry("No token provided. Using DesktopAuth for authentication. ",1)
+  """
+  Handles fetching items from 1Password based on the provided collection of item specifications.
+  It supports both token-based authentication and desktop app authentication.
+  Parameters:
+  dictItemCollection: A dictionary of dictionaries, containing the specifications for the items to fetch.
+                      Inner dictionaries should have the keys "vault_id" and "item_id" to specify
+                      the vault and item to fetch. The outer dictionary's keys are used as identifiers
+                      for the fetched items in the returned dictionary.
+  strAccountName: The name of the 1Password account to use for authentication
+                  in case of desktop app authentication.
+  strToken: The token to use for token-based authentication.
+  Returns: A dictionary of dictionaries containing the fetched items or an error message in case of failure.
+              The structure of the returned dictionary is as follows:
+              {
+                  "item_identifier": {
+                      "urls": [list of URLs associated with the item],
+                      "tags": [list of tags associated with the item],
+                      "notes": notes associated with the item,
+                      "totp": TOTP field value if present,
+                      "field_title_1": field_value_1,
+                      "field_title_2": field_value_2,
+                      ...
+                  },
+                  ...
+  """
+  if not strAccountName and not strToken:
+    return {"fatal error":
+            {"error message":"neither token nor 1Password account name provided. Unable to authenticate via 1Password."}}
+  if strToken is not None:
+    LogEntry("Using token-based authentication.",1)
+    try:
+      objClient = await Client.authenticate(auth=strToken,
+      integration_name=strScriptName,
+      integration_version=strVersion,)
+    except Exception as e:
+      LogEntry("Failed to authenticate with 1Password using the provided token. Error: {}".format(e),0,False)
+      LogEntry("Attempting Desktop Authentication as fallback. ",0,False)
       try:
         objClient = await Client.authenticate(
               auth=DesktopAuth(account_name=strAccountName),
               integration_name=strScriptName,
               integration_version=strVersion,)
       except Exception as e:
-        return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. Error: {}".format(e)}}
+        return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. "
+                                  "Error: {}".format(e)}}
+  else:
+    # Connects to the 1Password desktop app.
+    LogEntry("No token provided. Using DesktopAuth for authentication. ",1)
+    try:
+      objClient = await Client.authenticate(
+            auth=DesktopAuth(account_name=strAccountName),
+            integration_name=strScriptName,
+            integration_version=strVersion,)
+    except Exception as e:
+      return {"fatal error": {"error message": "Failed to authenticate with 1Password using both token and DesktopAuth. Error: {}".format(e)}}
 
-    LogEntry("Connected to 1Password",1)
+  LogEntry("Connected to 1Password",1)
 
-    dictCollection = {}
-    for key, item_spec in dictItemCollection.items():
-      strVaultID = item_spec["vault_id"]
-      strItemID = item_spec["item_id"]
-      try:
-        objItem = await objClient.items.get(strVaultID, strItemID)
-      except Exception as e:
-        return {"fatal error": {"error message": "Failed to retrieve item {0} from vault {1}. {2}".format(strItemID, strVaultID, e)}}
-      dictItem = {}
+  dictCollection = {}
+  for key, item_spec in dictItemCollection.items():
+    strVaultID = item_spec["vault_id"]
+    strItemID = item_spec["item_id"]
+    try:
+      objItem = await objClient.items.get(strVaultID, strItemID)
+    except Exception as e:
+      return {"fatal error": {"error message": "Failed to retrieve item {0} from vault {1}. {2}".format(strItemID, strVaultID, e)}}
+    dictItem = {}
 
-      if hasattr(objItem, 'websites') and objItem.websites:
-        dictItem["urls"] = [website.url for website in objItem.websites]
-      dictItem["tags"] = objItem.tags
-      dictItem["notes"] = objItem.notes
-      for objItemField in objItem.fields:
-        if objItemField.field_type == "Totp":
-          dictItem["totp"] = objItemField
-        else:
-          dictItem[objItemField.title] = objItemField.value
-      dictCollection[key] = dictItem
+    if hasattr(objItem, 'websites') and objItem.websites:
+      dictItem["urls"] = [website.url for website in objItem.websites]
+    dictItem["tags"] = objItem.tags
+    dictItem["notes"] = objItem.notes
+    for objItemField in objItem.fields:
+      if objItemField.field_type == "Totp":
+        dictItem["totp"] = objItemField
+      else:
+        dictItem[objItemField.title] = objItemField.value
+    dictCollection[key] = dictItem
 
-    return dictCollection
+  del objItem
+  del objClient
+
+  return dictCollection
 
 def CleanExit(strCause,bLog=True):
   """
@@ -526,10 +552,13 @@ def CleanExit(strCause,bLog=True):
   if objFileOut is not None:
     objFileOut.close()
     LogEntry("objFileOut closed", 1)
+
+  sentry_sdk.flush()
+  sentry_sdk.init(dsn=None) # This is to ensure that the Sentry SDK is properly closed and all events are flushed before exiting.
+
   objLogOut.close()
   print("Log file {} closed".format(strLogFile))
 
-  #sentry_sdk.capture_exception(Exception(strCause))
   sys.exit(9)
 
 def LogEntry(strMsg, iMsgLevel=0, bAbort=False):
@@ -913,8 +942,6 @@ def main():
   strAccountName = None
   strMikrotikToken = None
 
-  strDefAImodel = "claude-sonnet-4-6"
-
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
@@ -1056,7 +1083,6 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
-
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1236,7 +1262,7 @@ def main():
     strImportFile = objArgs.input
 
   if strAIsystemFile is None:
-    LogEntry("Please provide a path to a text file providing context for AI Calls. "
+    LogEntry("Please provide a path to a text file providing context for AI Calls, the file can be blank if you want. "
               "Put it in the general section of the config file as 'AIBackgroundFile = system.txt' "
               "assuming the file is called system.txt and is in the script directory.",0,True)
   else:
@@ -1355,10 +1381,11 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}".format(strBaseURL,strMetricURL),1)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}".format(strBaseURL,strMetricURL,strMikroTikURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'".format(strBaseURL,strMetricURL),1)
+  strMikroTikURL = NormalizeToHttps(strMikroTikURL)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikURL),1)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -1403,17 +1430,17 @@ def main():
           else:
              LogEntry("Something odd is going on. SKU {} does not have a valid result tuple".format(strSKU),0)
       else:
-         LogEntry("Import File {} not found, can't do anything".format(strImportFile),0)
+         LogEntry("Import File {} not found, can't do anything".format(strImportFile),0,True)
     else:
-       LogEntry("Import File not defined, nothing to import",0)
+       LogEntry("Import File not defined, nothing to import",0,True)
     if strFilter.endswith(","):
       strFilter = strFilter[:-1]
     if strFilter == "":
-      LogEntry("No products were successfully imported, so filter set to bogus product to skip next step.",0)
-      strFilter = "sku:PRODIMPORTFAILED12345"
+      LogEntry("No products were successfully imported, exiting abnormally.",0,True)
     LogEntry("Next up, applying attributes to the products we just imported...",0)
 
   if strAction == "MIKROTIK":
+    #Initializing MikroTik action
     LogEntry("Making sure no filter is applied for MikroTik action",0)
     strFilter = None
   if strAction == "FIX":
@@ -1437,7 +1464,7 @@ def main():
     if objFileOut is None or isinstance(objFileOut, str):
       objFileOut = None
       LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
-    objFileOut.write("Brand,SKU,Name,Status,Descr len,Existing Attribute Count,Description Attributes Count\n")
+    objFileOut.write("Brand,SKU,Name,Status,Descr len,Existing Attribute Count,Local Attribute Count,Description Attributes Count\n")
 
   # Here is basic prep work for all actions
   iPage = 1
@@ -1473,7 +1500,7 @@ def main():
     strURL = strBaseURL + strEndPoint + "?" + strParams
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
-      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,False)
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
     LogEntry("API call successful, processing response. "
              "{} total products in response, {} total pages".format(iTotal, iTotalPages),1)
     dictProducts = dictResponse[1]
@@ -1488,6 +1515,8 @@ def main():
         continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
+      ## TODO: Count local attributes
+      iLocalCount = -1
       if strAction != "MIKROTIK":
         LogEntry("Working on product {} with SKU {} and name {}. "
                "It has {} existing attributes and {} attributes in the description.".format(
@@ -1499,6 +1528,7 @@ def main():
          if len(lstBrands) > 0:
             strBrand = lstBrands[0]["name"]
       if strAction == "MIKROTIK":
+        # Build the report list for MikroTik stock report, sku and stock quantity only for products with brand MikroTik and stock quantity above 0
         if strBrand == "MikroTik" and dictProduct["stock_quantity"] > 0:
           LogEntry("Product {} - {} is a MikroTik product, stock level: {}.".format(dictProduct["sku"], dictProduct["name"], dictProduct["stock_quantity"]),0)
           dictReportItem = {}
@@ -1579,16 +1609,18 @@ def main():
             LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
           else:
             lstProductFailure.append(dictProduct["id"])
+            # TODO: Think about if this should be a fatal failure or not.
             LogEntry("Failed to update product {} with new attributes. "
                       "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
       if strAction == "AUDIT":
         # write out the audit file
         objFileOut.write("{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), len(dictAttributes)))
+            dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), iLocalCount, len(dictAttributes)))
         objFileOut.flush()
 
   if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
+    # For MikroTik action, post the stock levels to the MikroTik API. The API expects a list of items with code and count, and the API key for authentication.
     LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikURL, len(lstReport)),0)
     dictHeader = {}
     dictHeader["Content-Type"] = "application/json"
@@ -1597,6 +1629,9 @@ def main():
     dictUpdate["report"] = lstReport
     dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
     LogEntry("MikroTik API response: {}".format(dictResponse),0)
+    if not dictResponse[0]["Success"]:
+      LogEntry("Failed to post stock levels to MikroTik API.",0,True)
+
   if objFileOut is not None:
     objFileOut.close()
     LogEntry("Audit file {} closed".format(strOutFileName),0)
@@ -1608,6 +1643,9 @@ def main():
   LogEntry("Finished processing products. Total products fetched: {}".format(iTotalProducts),0)
 
   objLogOut.close()
+  del objParser
+  del strSentryDSN
+  del objAIClient
   print("Log file {} closed".format(strLogFile))
 
 
