@@ -17,7 +17,9 @@ If you provide an ingestion host and source token for a metric server like Bette
 
 Also sentry reporting is integrated. You provide your DSN in the configuration file or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
 
-Heartbeat is also supported if you support a heartbeat URL in the config file
+Heartbeat is also supported if you supply a heartbeat URL and failure code in the config file, all exits via error handling will be logged as incidents through the heartbeat function, if fail conditions are supported by it.
+
+If you provide a incident support system API URL and Key, all error handling exits will also generate an incident. The code assumes BetterStack incident system.
 
 There are five main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
 
@@ -106,8 +108,10 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `FixCategory = Uncategorized` *(Additional filter safety net for FIX operation, only fix products in this category.)*\
 `IngestionHost = xxxx.yyyy.betterstackdata.com` *(Provide your Better Stack or other OpenMetric ingesting host here.)*\
 `MetricEndpoint = metrics` *(The endpoint to post the metrics to. For Better stack the pattern is schema+igestionhost+"metrics" or `https://xxxx.yyyy.betterstackdata.com/metrics` defaults to "metrics" if not supplied)*\
+`FailureCode = fail` *(Default exit code used by heartbeat function. String "fail" and numbers greater than 0 will cause heartbeat to create an incident on error exit. Anything else will disable this)*\
 `SentryDSN = https://asdfjælasjdflæajsdlfjlaj@xxxxyyyxxx.eu-fsn-3.betterstackdata.com/123564` *(Your sentry DSN, leave this blank to disable Sentry)*\
 `HeartBeatURL = https://uptime.betterstack.com/api/v1/heartbeat/q49e2LCdamHxyzabcRRozhALb` *(Heartbeat URL, optional)*\
+`IncidentURL = https://uptime.betterstack.com/api/v3/incidents` *(URL for the incident creation URL, optional)*\
 `OutDir = c:\temp` *(The directory where all write operations should take place)*\
 `ImportFile = c:\temp\myimportfile.csv` *(Full path of the import file needed for import operations)*\
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\
@@ -128,13 +132,18 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `APIKeyField = credential` *(The name of the field or env variable with the AI API key)*\
-`MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Source Token)*
+`MetricTokenField = MetricToken` *(The name of the field or env variable with Better Stack Metrics Source Token)*
 
 `[MikrotikCreds]` *(This section is only needed if you intend to use the MikroTik function)*\
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `TokenField = credential` *(The name of the field or env variable with the MikroTik API key)*\
 `HostField = hostname` *(The name of the field or env variable holding the URL to post the stock update to)*\
+
+`[UptimeCreds]`\
+`VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
+`TokenField = credential` *(The name of the field or env variable with the Uptime API key)*\
 
 ### Attribute Substitution
 

@@ -10,8 +10,10 @@ FixTag = NeedsFixing
 FixCategory = Uncategorized
 IngestionHost = Better Stack or similar OpenMetric server for posting metric. Empty disables metric posting
 MetricEndpoint = metrics
+FailureCode = fail
 SentryDSN = https://asdfjælasjdflæajsdlfjlaj@xxxxyyyxxx.eu-fsn-3.betterstackdata.com/123564
 HeartBeatURL = https://uptime.betterstack.com/api/v1/heartbeat/q49e2LCdamHxyzabcRRozhALb
+IncidentURL = https://uptime.betterstack.com/api/v3/incidents
 OutDir = c:\temp
 ImportFile = c:\temp\input.csv
 AIBackgroundFile = system.txt
@@ -44,3 +46,8 @@ VaultID = 1Password VaultID
 ItemID = 1Password ItemID
 TokenField = credential
 HostField = hostname
+
+[UptimeCreds]
+VaultID = 1Password VaultID
+ItemID = 1Password ItemID
+TokenField = credential

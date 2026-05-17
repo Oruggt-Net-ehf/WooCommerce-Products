@@ -434,6 +434,31 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
 
   return dictGeneric
 
+def CreateIncident(strName, strSummary, strDetails):
+  """
+  Create an incident in Incident system with the provided summary and details.
+  Parameters:
+    strName (str): The name of the incident to be created
+    strSummary (str): The summary of the incident to be created
+    strDetails (str): The detailed description of the incident
+
+  Returns:
+    dict: A dictionary containing the response from the incident API, or error details in case of failure
+  """
+  dictHeader = {}
+  dictHeader["Authorization"] = "Bearer {}".format(strBSKey)
+  dictHeader["Content-Type"] = "application/json"
+  dictPayload = {}
+  dictPayload["name"] = strName
+  dictPayload["summary"] = strSummary
+  dictPayload["requester_email"] = "{}@{}".format(strScriptName, strScriptHost)
+  dictPayload["description"] = strDetails
+  strMethod = "post"
+
+  LogEntry("Creating incident with title: {}".format(strSummary), 1)
+  WebResponse = MakeAPICall(strIncidentURL, dictHeader, strMethod, dictPayload)
+  return WebResponse
+
 def GetEnvCreds(dictCollectionIn):
     """
     Fetches WooCommerce API credentials from environment variables.
@@ -551,8 +576,12 @@ def CleanExit(strCause,bLog=True):
         strScriptName, strScriptHost, strCause), 0)
 
   if strHeartBeatURL:
-    WebResponse = MakeAPICall(strHeartBeatURL+"/fail",{},"HEAD",objData=strCause)
+    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strExitCode,{},"HEAD",objData=strCause)
     LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
+
+  if strBSKey and strIncidentURL:
+    WebResponse = CreateIncident("Script Failure", "Error in {} on {}".format(strScriptName, strScriptHost), "Script {} on host {} is exiting abnormally due to: {}".format(strScriptName, strScriptHost, strCause))
+    LogEntry("BetterStack incident creation response: {}".format(WebResponse))
 
   if objFileOut is not None:
     objFileOut.close()
@@ -609,63 +638,6 @@ def isInt(CheckValue):
     else:
         fTemp = "NULL"
     return fTemp != "NULL"
-
-def GetSpecificationsFollower(strHTML):
-    """
-    Parses an HTML string, finds the heading "Technical Specification" or "Specifications"
-    and determines what element immediately follows it, ignoring any div elements.
-    Parameters:
-      strHTML: A string containing HTML content
-    Returns:
-      A string indicating what follows the specifications heading:
-        - "table" if a <table> element follows
-        - "ul" if an unordered list <ul> element follows
-        - "neither" if neither a table nor ul follows
-    """
-    try:
-        soup = BeautifulSoup(strHTML, 'html.parser')
-
-        # Find all heading tags (h1-h6)
-        for heading_tag in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            # Check if the heading text is "specifications" or "technical specification" (case-insensitive)
-            heading_text = heading_tag.get_text().strip().lower()
-            if heading_text == 'specifications' or heading_text == 'technical specification':
-                # Get the next sibling element that is a tag (skip text nodes and div elements)
-                next_element = heading_tag.find_next_sibling()
-
-                # Skip any text nodes, whitespace, and div elements
-                while next_element:
-                    if isinstance(next_element, str):
-                        # Skip text nodes
-                        if not next_element.strip():
-                            next_element = next_element.find_next_sibling() if hasattr(next_element, 'find_next_sibling') else None
-                        else:
-                            break
-                    elif hasattr(next_element, 'name') and next_element.name and next_element.name.lower() == 'div':
-                        # Skip div elements
-                        next_element = next_element.find_next_sibling()
-                    else:
-                        break
-
-                if next_element is None:
-                    return "none"
-
-                # Check the tag name of the next element
-                tag_name = next_element.name.lower() if next_element.name else "neither"
-
-                if tag_name == "table":
-                    return "table"
-                elif tag_name == "ul":
-                    return "ul"
-                else:
-                    return "neither"
-
-        # If specifications heading not found
-        return "not found"
-
-    except Exception as e:
-        LogEntry(f"Error parsing HTML in GetSpecificationsFollower: {e}", 3)
-        return "error"
 
 def ParseJsonResponse(strText: str) -> dict:
     strCleaned = re.sub(r"^```(?:json)?\n?", "", strText.strip())
@@ -941,6 +913,9 @@ def main():
   global strVersion
   global strLogFile
   global strHeartBeatURL
+  global strBSKey
+  global strIncidentURL
+  global strExitCode
 
   dictProxies = {}
   strOutDir = None
@@ -948,6 +923,9 @@ def main():
   strAccountName = None
   strMikrotikToken = None
   strHeartBeatURL = None
+  strBSKey = None
+  strIncidentURL = None
+  strExitCode = "fail"
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
@@ -1007,6 +985,9 @@ def main():
   strLogFile = strLogDir + strScriptName[:iLoc] + ISO + ".log"
   print ("Logging to file: {}".format(strLogFile))
   objLogOut = GetFileHandle(strLogFile, "w")
+  if isinstance(objLogOut, str):
+    print("Unable to open log file {}, error was: {}, aborting".format(strLogFile, objLogOut))
+    sys.exit(9)
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
   bAudit = objArgs.audit
@@ -1073,6 +1054,8 @@ def main():
 
   try:
     objConFileHndl = GetFileHandle(strConfile, "r")
+    if isinstance(objConFileHndl, str):
+      LogEntry("Unable to open configuration file {}, error was: {}, aborting".format(strConfile, objConFileHndl),0,True)
     objConfig = configparser.ConfigParser()
     objConfig.read_file(objConFileHndl)
     objConFileHndl.close()
@@ -1090,7 +1073,7 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
-
+  strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
       strAuthMethod = objConfig["Generic"]["AuthMethod"].strip().lower()[:3]
@@ -1122,6 +1105,10 @@ def main():
       strAIModel = objConfig["Generic"]["AIModel"]
     else:
       strAIModel = strDefAImodel
+    if "IncidentURL" in objConfig["Generic"]:
+      strIncidentURL = objConfig["Generic"]["IncidentURL"]
+    else:
+      strIncidentURL = None
     if "HeartBeatURL" in objConfig["Generic"]:
       strHeartBeatURL = objConfig["Generic"]["HeartBeatURL"]
     else:
@@ -1188,6 +1175,26 @@ def main():
   else:
     LogEntry("section Generic not found in config",0)
 
+  if "UptimeCreds" in objConfig:
+    if strAuthMethod == "1pa":
+      if "VaultID" in objConfig["UptimeCreds"]:
+        strBSVaultID = objConfig["UptimeCreds"]["VaultID"]
+      else:
+        LogEntry("UptimeCreds VaultID not found in config",0)
+        strBSVaultID = None
+      if "ItemID" in objConfig["UptimeCreds"]:
+        strBSItemID = objConfig["UptimeCreds"]["ItemID"]
+      else:
+        LogEntry("UptimeCreds ItemID not found in config",0)
+        strBSItemID = None
+    if "TokenField" in objConfig["UptimeCreds"]:
+      strBSKeyField = objConfig["UptimeCreds"]["TokenField"]
+    else:
+      LogEntry("UptimeCreds TokenField not found in config",0)
+      strBSKeyField = None
+  else:
+    LogEntry("section UptimeCreds not found in config",0)
+
   if "MikrotikCreds" in objConfig:
     if strAuthMethod == "1pa":
       if "VaultID" in objConfig["MikrotikCreds"]:
@@ -1212,7 +1219,6 @@ def main():
       strMTURLField = None
   else:
     LogEntry("section MikrotikCreds not found in config",0)
-
 
   if "AICreds" in objConfig:
     if strAuthMethod == "1pa":
@@ -1276,6 +1282,8 @@ def main():
     if os.path.isfile(strAIsystemFile):
       LogEntry("AI System file appears good",1)
       objAISystem = GetFileHandle(strAIsystemFile,"r")
+      if isinstance(objAISystem, str):
+        LogEntry("Unable to open AI system file {}, error was: {}, aborting".format(strAIsystemFile, objAISystem),0,True)
       strAIsystem = objAISystem.read()
       objAISystem.close()
     else:
@@ -1285,6 +1293,8 @@ def main():
     if os.path.isfile(strAttrEqFile):
       LogEntry("Attribute equivalence file {} found, processing.".format(strAttrEqFile),1)
       objAttrEqFileHndl = GetFileHandle(strAttrEqFile, "r")
+      if isinstance(objAttrEqFileHndl, str):
+        LogEntry("Unable to open attribute equivalence file {}, error was: {}, aborting".format(strAttrEqFile, objAttrEqFileHndl),0,True)
       dictAttrEq = {}
       for strLine in objAttrEqFileHndl:
         if ";" in strLine:
@@ -1307,6 +1317,9 @@ def main():
 
   if strHeartBeatURL.endswith("/"):
     strHeartBeatURL = strHeartBeatURL[:-1]
+  if strIncidentURL.endswith("/"):
+    strIncidentURL = strIncidentURL[:-1]
+
   if not strMetricEndpoint:
       strMetricEndpoint = strDefMetricEndPoint
 
@@ -1332,6 +1345,10 @@ def main():
     dictItemSpecs["item_id"] = strItemID
     dictItemCollection["WCreds"] = dictItemSpecs
     dictItemSpecs = {}
+    dictItemSpecs["vault_id"] = strBSVaultID
+    dictItemSpecs["item_id"] = strBSItemID
+    dictItemCollection["UptimeCreds"] = dictItemSpecs
+    dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strAIVaultID
     dictItemSpecs["item_id"] = strAIItemID
     dictItemSpecs["metric_key"] = strMetricTokenField
@@ -1342,7 +1359,6 @@ def main():
     dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemSpecs["HostField"] = strMTURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
-
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
       strAccountName, "provided" if str1PassToken else "not provided"),0)
@@ -1369,6 +1385,9 @@ def main():
     dictItemSpecs["MTSecret"] = strMTAPIKeyField
     dictItemSpecs["HostField"] = strMTURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemSpecs["BSkey"] = strBSKeyField
+    dictItemCollection["UptimeCreds"] = dictItemSpecs
 
     dictReturn = GetEnvCreds(dictItemCollection)
 
@@ -1382,6 +1401,9 @@ def main():
   strMetricToken = dictReturn["AICreds"].get(strMetricTokenField)
   strMikrotikToken = dictReturn["MikrotikCreds"].get(strMTAPIKeyField)
   strMikroTikURL = dictReturn["MikrotikCreds"].get(strMTURLField)
+  strBSKey = dictReturn["UptimeCreds"].get(strBSKeyField)
+
+  LogEntry("Credentials retrieved. Validating critical credentials and normalizing URLs.",1)
 
   if not strBaseURL or not strWCKey or not strWCSecret:
     LogEntry("No URL Consumer Key or Secret, unable to proceed.",0,True)
@@ -1394,6 +1416,7 @@ def main():
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
   strMikroTikURL = NormalizeToHttps(strMikroTikURL)
+  strIncidentURL = NormalizeToHttps(strIncidentURL)
   LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikURL),1)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
