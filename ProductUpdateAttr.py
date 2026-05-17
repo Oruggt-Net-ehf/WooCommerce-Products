@@ -1639,7 +1639,7 @@ def main():
     dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
     LogEntry("MikroTik API response: {}".format(dictResponse),0)
     if not dictResponse[0]["Success"]:
-      LogEntry("Failed to post stock levels to MikroTik API.[{}]".format(dictResponse[1]["errormsg"]),0,True)
+      LogEntry("Failed to post stock levels to MikroTik API.[{}]".format(dictResponse[1][0]["errormsg"]),0,True)
 
   if objFileOut is not None:
     objFileOut.close()
