@@ -549,6 +549,11 @@ def CleanExit(strCause,bLog=True):
   if bLog:
     LogEntry("{} is exiting abnormally on {}: {}".format(
         strScriptName, strScriptHost, strCause), 0)
+
+  if strHeartBeatURL:
+    WebResponse = MakeAPICall(strHeartBeatURL+"/fail",{},"HEAD",objData=strCause)
+    LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
+
   if objFileOut is not None:
     objFileOut.close()
     LogEntry("objFileOut closed", 1)
@@ -826,7 +831,7 @@ def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objD
   try:
     if strMethod.lower() == "head":
       WebRequest = requests.request("HEAD", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies,
-                                    headers=dictHeader)
+                                    headers=dictHeader, data=objData)
     if strMethod.lower() == "put":
       WebRequest = requests.request("PUT", strURL, timeout=iTimeOut, verify=False, proxies=dictProxies,
                                     headers=dictHeader, data=objData)
@@ -935,12 +940,14 @@ def main():
   global strMetricEndpoint
   global strVersion
   global strLogFile
+  global strHeartBeatURL
 
   dictProxies = {}
   strOutDir = None
   objFileOut = None
   strAccountName = None
   strMikrotikToken = None
+  strHeartBeatURL = None
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
@@ -1298,6 +1305,8 @@ def main():
   if not strAccountName and strAuthMethod == "1pa":
      LogEntry("Auth method is 1Password but 1Password account name not specified, can't proceed",0,True)
 
+  if strHeartBeatURL.endswith("/"):
+    strHeartBeatURL = strHeartBeatURL[:-1]
   if not strMetricEndpoint:
       strMetricEndpoint = strDefMetricEndPoint
 
@@ -1630,7 +1639,7 @@ def main():
     dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
     LogEntry("MikroTik API response: {}".format(dictResponse),0)
     if not dictResponse[0]["Success"]:
-      LogEntry("Failed to post stock levels to MikroTik API.",0,True)
+      LogEntry("Failed to post stock levels to MikroTik API.[{}]".format(dictResponse[1]["errormsg"]),0,True)
 
   if objFileOut is not None:
     objFileOut.close()
@@ -1646,7 +1655,7 @@ def main():
   del objParser
   del strSentryDSN
   del objAIClient
-  print("Log file {} closed".format(strLogFile))
+  print("Log file {} closed, objects deleted".format(strLogFile))
 
 
 
