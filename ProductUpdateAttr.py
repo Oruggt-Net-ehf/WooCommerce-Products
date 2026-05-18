@@ -253,6 +253,56 @@ def ExtractTwoColumnTables(strHTML):
 
     return dictReturn
 
+def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, strWCSecret:str)->list:
+    """
+    Converts local attributes in a list of WooCommerce attributes to global attributes.
+    Local attributes are identified by having an "id" of 0 and a "name" that matches a global attribute.
+    Parameters:
+        lstAttributes (list): A list of attribute dictionaries from WooCommerce
+        strBaseURL (str): The base URL for the WooCommerce API
+        strWCKey (str): The WooCommerce API key
+        strWCSecret (str): The WooCommerce API secret
+    Returns:
+        list: A new list of attribute dictionaries where local attributes have been replaced
+        with their global counterparts if a match was found, otherwise they are left unchanged.
+    """
+    lstConverted = []
+    iAttrID = None
+    bChanged = False
+    if not isinstance(lstAttributes, list):
+      LogEntry("Expected list of attributes, got {} instead".format(type(lstAttributes)), 0, False)
+      return []
+    for dictAttribute in lstAttributes:
+      if dictAttribute.get("id") == 0:
+        strAttrName = dictAttribute.get("name", "").strip().lower()
+        if strAttrName in dictGlobalAttributes:
+          iAttrID = dictGlobalAttributes[strAttrName]
+        else:
+          LogEntry("Attribute {} not found in global attributes, creating it.".format(strAttrName),0)
+          iAttrID = CreateGlobalAttribute(strAttrName, strBaseURL, strWCKey, strWCSecret)
+          dictGlobalAttributes[strAttrName] = iAttrID
+        if iAttrID is None:
+          LogEntry("Failed to create global attribute for local attribute {}. Skipping conversion.".format(strAttrName), 0, False)
+          lstConverted.append(dictAttribute)
+        else:
+          bChanged = True
+          bVariation = dictAttribute.get("variation", False)
+          dictGlobalAttr = {}
+          dictGlobalAttr["id"] = iAttrID
+          dictGlobalAttr["name"] = dictAttribute.get("name", "")
+          dictGlobalAttr["options"] = dictAttribute.get("options", [])
+          dictGlobalAttr["variation"] = bVariation
+          dictGlobalAttr["visible"] = dictAttribute.get("visible", True)
+          lstConverted.append(dictGlobalAttr)
+          if bVariation:
+            LogEntry("WARNING!! Converted attribute {} used for variation from local to global with ID {}.".format(strAttrName, dictGlobalAttributes[strAttrName]), 0, False)
+          else:
+            LogEntry("Converted local attribute '{}' to global with ID {}".format(strAttrName, dictGlobalAttributes[strAttrName]), 0, False)
+      else:
+        lstConverted.append(dictAttribute)
+
+    return bChanged, lstConverted
+
 def countLocalAttributes(lstAttributes:list)->int:
     """
     Counts how many local attributes are in a list of WooCommerce attributes.
@@ -1565,7 +1615,6 @@ def main():
         continue
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
-      ## TODO: Count local attributes
       iLocalCount = countLocalAttributes(lstProdAttribs)
       if strAction != "MIKROTIK":
         LogEntry("Working on product {} with SKU {} and name {}. "
