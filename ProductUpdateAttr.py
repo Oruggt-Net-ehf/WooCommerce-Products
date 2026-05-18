@@ -253,6 +253,24 @@ def ExtractTwoColumnTables(strHTML):
 
     return dictReturn
 
+def countLocalAttributes(lstAttributes:list)->int:
+    """
+    Counts how many local attributes are in a list of WooCommerce attributes.
+    Local attributes are identified by having an "id" of 0.
+    Parameters:
+        lstAttributes (list): A list of attribute dictionaries from WooCommerce
+    Returns:
+        int: The number of local attributes in the list
+    """
+    intCount = 0
+    if not isinstance(lstAttributes, list):
+      LogEntry("Expected list of attributes, got {} instead".format(type(lstAttributes)), 0, False)
+      return -1
+    for dictAttribute in lstAttributes:
+        if dictAttribute.get("id") == 0:
+            intCount += 1
+    return intCount
+
 def AttributeExists(listAttributeCollection, strSearchName):
     """
     Check if a string can be found in a WooCommerce attribute collection.
@@ -1548,7 +1566,7 @@ def main():
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
       ## TODO: Count local attributes
-      iLocalCount = -1
+      iLocalCount = countLocalAttributes(lstProdAttribs)
       if strAction != "MIKROTIK":
         LogEntry("Working on product {} with SKU {} and name {}. "
                "It has {} existing attributes and {} attributes in the description.".format(
@@ -1647,7 +1665,7 @@ def main():
 
       if strAction == "AUDIT":
         # write out the audit file
-        objFileOut.write("{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
+        objFileOut.write("{},{},{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
             dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), iLocalCount, len(dictAttributes)))
         objFileOut.flush()
 
