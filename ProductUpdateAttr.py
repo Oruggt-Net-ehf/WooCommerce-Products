@@ -56,7 +56,7 @@ sys.excepthook = CustomExcepthook
 
 # sub defs
 
-def GetExceptionLocation(objTraceback)->str:
+def GetExceptionLocation(objTraceback:traceback.StackSummary)->str:
   objTB = traceback.extract_tb(objTraceback)
 
   objMyFrame = None
@@ -103,7 +103,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
 
-def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
+def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, strWCSecret:str):
     """
     Create a new WooCommerce product using the REST API.
     Parameters:
@@ -124,7 +124,8 @@ def CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret):
     return MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
 
 def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:str, strWCSecret:str,
-                                     strAIsystem:str, objAIClient:any,strAIModel:str,iMaxTokens:int, strDelim:str=",")->list:
+                                     strAIsystem:str, objAIClient:any,strAIModel:str,
+                                     iMaxTokens:int, strDelim:str=",")->list:
     """
     Read a CSV file with columns:
     Brand, sku, EAN/GTIN, Name, Descr, Price, Cost, Stock, Allow Backorder, Enable Reviews
@@ -221,7 +222,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
 
     return lstResults
 
-def ExtractTwoColumnTables(strHTML):
+def ExtractTwoColumnTables(strHTML:str)->dict:
     """
     Extract all two-column tables from HTML and return as a dictionary.
     Parameters:
@@ -277,6 +278,8 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
     for dictAttribute in lstAttributes:
       if dictAttribute.get("id") == 0:
         strAttrName = dictAttribute.get("name", "").strip().lower()
+        if strAttrName == "type":
+          continue
         if strAttrName in dictGlobalAttributes:
           iAttrID = dictGlobalAttributes[strAttrName]
         else:
@@ -325,7 +328,7 @@ def countLocalAttributes(lstAttributes:list)->int:
             intCount += 1
     return intCount
 
-def AttributeExists(listAttributeCollection, strSearchName):
+def AttributeExists(listAttributeCollection:list, strSearchName:str)->str|bool:
     """
     Check if a string can be found in a WooCommerce attribute collection.
 
@@ -352,7 +355,7 @@ def AttributeExists(listAttributeCollection, strSearchName):
 
     return "false"
 
-def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
+def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, strWCSecret:str):
     """
     Create a new global attribute in WooCommerce and return its ID.
 
@@ -394,7 +397,7 @@ def CreateGlobalAttribute(strAttributeName, strBaseURL, strWCKey, strWCSecret):
         LogEntry("Attribute created but could not extract ID from response", 0, False)
         return None
 
-def CreateBrand(strBrandName, strBaseURL, strWCKey, strWCSecret):
+def CreateBrand(strBrandName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->int|None:
     """
     Create a new global brand in WooCommerce and return its ID.
 
@@ -436,7 +439,7 @@ def CreateBrand(strBrandName, strBaseURL, strWCKey, strWCSecret):
         LogEntry("Brand created but could not extract ID from response", 0, False)
         return None
 
-def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strWCSecret):
+def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
     """
     Update a specific product in WooCommerce with the provided product data.
 
@@ -469,7 +472,7 @@ def UpdateWooCommerceProduct(dictProduct, iProductID, strBaseURL, strWCKey, strW
     LogEntry("Successfully updated product ID: {}".format(iProductID), 2)
     return dictResponse
 
-def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
+def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->dict:
   LogEntry("Loading values from {}".format(strEndPoint),1)
   dictHeader = {}
   strMethod = "get"
@@ -506,7 +509,7 @@ def LoadDictionaries(strEndPoint, strBaseURL, strWCKey, strWCSecret):
 
   return dictGeneric
 
-def CreateIncident(strName, strSummary, strDetails):
+def CreateIncident(strName:str, strSummary:str, strDetails:str)->dict:
   """
   Create an incident in Incident system with the provided summary and details.
   Parameters:
@@ -531,7 +534,7 @@ def CreateIncident(strName, strSummary, strDetails):
   WebResponse = MakeAPICall(strIncidentURL, dictHeader, strMethod, dictPayload)
   return WebResponse
 
-def GetEnvCreds(dictCollectionIn):
+def GetEnvCreds(dictCollectionIn:dict)->dict:
     """
     Fetches WooCommerce API credentials from environment variables.
     dictCollection: Dictionary of dictionaries with name of env variables to fetch
@@ -547,7 +550,7 @@ def GetEnvCreds(dictCollectionIn):
 
     return dictCollection
 
-async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=None):
+async def get1PasswordItems(dictItemCollection:dict, strAccountName:str|None=None, strToken:str|None=None)->dict:
   """
   Handles fetching items from 1Password based on the provided collection of item specifications.
   It supports both token-based authentication and desktop app authentication.
@@ -632,7 +635,7 @@ async def get1PasswordItems(dictItemCollection, strAccountName=None, strToken=No
 
   return dictCollection
 
-def CleanExit(strCause,bLog=True):
+def CleanExit(strCause:str,bLog=True):
   """
   Handles cleaning things up before unexpected exit in case of an error.
   Things such as closing down open file handles, open database connections, etc.
@@ -667,7 +670,7 @@ def CleanExit(strCause,bLog=True):
 
   sys.exit(9)
 
-def LogEntry(strMsg, iMsgLevel=0, bAbort=False):
+def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False):
   """
   This handles writing all event logs into the appropriate log facilities
   This could be a simple text log file, a database connection, etc.
@@ -694,7 +697,7 @@ def LogEntry(strMsg, iMsgLevel=0, bAbort=False):
   if bAbort:
     CleanExit(strMsg,bLog=False)
 
-def isInt(CheckValue):
+def isInt(CheckValue:any)->bool:
     """
     function to safely check if a value can be interpreded as an int
     Parameter:
@@ -710,6 +713,24 @@ def isInt(CheckValue):
     else:
         fTemp = "NULL"
     return fTemp != "NULL"
+
+def StripHTML(strHTML:str)->str:
+  """
+  This function takes a string containing HTML content
+  and returns a plain text version of it by removing all HTML tags.
+  Also strips out all script, style and other such non-text sections.
+  Parameters:
+      strHTML (str): The input string containing HTML content.
+  Returns:
+      str: The plain text version of the input string.
+  """
+  objSoup = BeautifulSoup(strHTML, "html.parser")
+
+  for objTag in objSoup(["script", "style","noscript", "iframe", "template", "iframe", "object", "embed"]):
+      objTag.decompose()
+
+  strText = objSoup.get_text(separator=" ", strip=True)
+  return strText
 
 def ParseJsonResponse(strText: str) -> dict:
     strCleaned = re.sub(r"^```(?:json)?\n?", "", strText.strip())
@@ -737,7 +758,7 @@ def IsFqdn(strHost: str) -> bool:
     strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
     return bool(re.match(strPattern, strHost))
 
-def GetFileHandle(strFileName, strperm):
+def GetFileHandle(strFileName:str, strperm:str)->object:
     """
     This wraps error handling around standard file open function
     Parameters:
@@ -774,7 +795,7 @@ def GetFileHandle(strFileName, strperm):
       LogEntry("Unknown error: {}".format(err),0)
       return ("unknowErr")
 
-def FetchEnv(strVarName):
+def FetchEnv(strVarName:str)->str|None:
   """
   Function that fetches the specified content of specified environment variable.
   Parameters:
@@ -788,7 +809,7 @@ def FetchEnv(strVarName):
   else:
     return None
 
-def Convert2OpenMetricGauge(dictPayloads):
+def Convert2OpenMetricGauge(dictPayloads:dict)->list:
     """
     Transform a dictionary of metrics into OpenMetrics format, type Gauge.
 
@@ -828,7 +849,8 @@ def SubmitMetric(dictPayload:dict,strURL:str,strToken:str,strEndPoint:str="metri
 
   return WebRequest
 
-def MakeAPICall(strURL, dictHeader, strMethod, dictPayload="", objFiles=[], objData=None, strUser="", strPWD=""):
+def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
+                objFiles:list=[], objData=None, strUser:str="", strPWD:str="")->tuple:
   """
   Handles the actual communication with the API, has a backoff mechanism
   MinQuiet defines how many seconds must elapse between each API call.
@@ -1571,7 +1593,7 @@ def main():
     if objFileOut is None or isinstance(objFileOut, str):
       objFileOut = None
       LogEntry("Unable to open output file {}, error: {}".format(strOutFileName, objFileOut),0,True)
-    objFileOut.write("Brand,SKU,Name,Status,Descr len,Existing Attribute Count,Local Attribute Count,Description Attributes Count\n")
+    objFileOut.write("Brand,SKU,Name,Type,Status,Descr len,Existing Attribute Count,Local Attribute Count,Description Attributes Count\n")
 
   # Here is basic prep work for all actions
   iPage = 1
@@ -1731,8 +1753,8 @@ def main():
 
       if strAction == "AUDIT":
         # write out the audit file
-        objFileOut.write("{},{},{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), iLocalCount, len(dictAttributes)))
+        objFileOut.write("{},{},{},{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
+            dictProduct["name"].replace(","," ").strip(), dictProduct["type"], dictProduct["status"], len(dictProduct["description"]), len(lstProdAttribs), iLocalCount, len(dictAttributes)))
         objFileOut.flush()
 
   if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
