@@ -264,6 +264,7 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
         strWCSecret (str): The WooCommerce API secret
     Returns:
         tuple: A tuple containing:
+          int: The number of local attributes converted
           bool: True if any attributes were changed, False otherwise
           list: A new list of attribute dictionaries where local attributes have been replaced
           with their global counterparts if a match was found, otherwise they are left unchanged.
@@ -271,9 +272,10 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
     lstConverted = []
     iAttrID = None
     bChanged = False
+    iCount = 0
     if not isinstance(lstAttributes, list):
       LogEntry("Expected list of attributes, got {} instead".format(type(lstAttributes)), 0, False)
-      return False, []
+      return 0, False, []
     for dictAttribute in lstAttributes:
       if dictAttribute.get("id") == 0:
         strAttrName = dictAttribute.get("name", "").strip().lower()
@@ -288,6 +290,7 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
           lstConverted.append(dictAttribute)
         else:
           bChanged = True
+          iCount += 1
           bVariation = dictAttribute.get("variation", False)
           dictGlobalAttr = {}
           dictGlobalAttr["id"] = iAttrID
@@ -303,7 +306,8 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
       else:
         lstConverted.append(dictAttribute)
 
-    return bChanged, lstConverted
+
+    return iCount, bChanged, lstConverted
 
 def countLocalAttributes(lstAttributes:list)->int:
     """
@@ -1622,12 +1626,12 @@ def main():
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
       iLocalCount = countLocalAttributes(lstProdAttribs)
       if strAction == "CONVERT":
-        bUpdate, lstAttrib = ConvertLocalAttributes(lstProdAttribs, strBaseURL, strWCKey, strWCSecret)
+        iCount, bUpdate, lstAttrib = ConvertLocalAttributes(lstProdAttribs, strBaseURL, strWCKey, strWCSecret)
         if bUpdate:
           dictResult = UpdateWooCommerceProduct({"attributes": lstAttrib}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
           if dictResult[0]["Success"]:
-            LogEntry("Successfully converted local attributes to global for product {} with SKU {} and name {}".format(
-              dictProduct["id"], dictProduct["sku"], dictProduct["name"]),0)
+            LogEntry("Successfully converted {} local attributes to global for product {} with SKU {} and name {}".format(
+              iCount, dictProduct["id"], dictProduct["sku"], dictProduct["name"]),0)
           else:
             LogEntry("Failed to convert local attributes for product {} with SKU {} and name {}. Error: {}".format(
               dictProduct["id"], dictProduct["sku"], dictProduct["name"], dictResult[1]),0)
