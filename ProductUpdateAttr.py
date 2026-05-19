@@ -1739,8 +1739,9 @@ def main():
             bVariation = False
             if isinstance(AttrFound,dict):
               if AttrFound["variation"]:
-                LogEntry("WARNING!! Converted attribute {} used for variation from local to global. "
+                LogEntry("attribute {} used for variation skipping. "
                            "ID:{} SKU:{} Name:{}".format(strKey, dictProduct["id"], dictProduct["sku"], dictProduct["name"]),0)
+                continue
               lstProdAttribs.remove(AttrFound)
               bVariation = AttrFound["variation"]
 
