@@ -253,7 +253,7 @@ def ExtractTwoColumnTables(strHTML):
 
     return dictReturn
 
-def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, strWCSecret:str)->list:
+def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
     """
     Converts local attributes in a list of WooCommerce attributes to global attributes.
     Local attributes are identified by having an "id" of 0 and a "name" that matches a global attribute.
@@ -263,15 +263,17 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
         strWCKey (str): The WooCommerce API key
         strWCSecret (str): The WooCommerce API secret
     Returns:
-        list: A new list of attribute dictionaries where local attributes have been replaced
-        with their global counterparts if a match was found, otherwise they are left unchanged.
+        tuple: A tuple containing:
+          bool: True if any attributes were changed, False otherwise
+          list: A new list of attribute dictionaries where local attributes have been replaced
+          with their global counterparts if a match was found, otherwise they are left unchanged.
     """
     lstConverted = []
     iAttrID = None
     bChanged = False
     if not isinstance(lstAttributes, list):
       LogEntry("Expected list of attributes, got {} instead".format(type(lstAttributes)), 0, False)
-      return []
+      return False, []
     for dictAttribute in lstAttributes:
       if dictAttribute.get("id") == 0:
         strAttrName = dictAttribute.get("name", "").strip().lower()
@@ -1016,7 +1018,9 @@ def main():
   objParser.add_argument("--mikrotik", dest="mikrotik",
                       action="store_true", help="Action directive. Update stock level with Mikrotik."
                       "Required unless you specify another action, only one action can be specified.")
-
+  objParser.add_argument("--convert", dest="convert",
+                      action="store_true", help="Action directive. Convert local attributes to global ones."
+                      "Required unless you specify another action, only one action can be specified.")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
@@ -1063,7 +1067,7 @@ def main():
   bImport = objArgs.prodimport
   bFix = objArgs.fix
   bMikrotik = objArgs.mikrotik
-
+  bConvert = objArgs.convert
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
            "and rewrite product descriptions.\n"
@@ -1074,15 +1078,15 @@ def main():
   LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
-  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik])
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bConvert])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, --fix or --mikrotik can be used.",0)
+             "Only one of --audit, --update, --import, --fix, --mikrotik or --convert can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
-    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX or MIKROTIK: ")
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT or MIKROTIK: ")
     strAction = strAction.upper()
-    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "MIKROTIK"]:
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "MIKROTIK"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
   if iActionCount == 1:
     # Determine and set the action string
@@ -1096,7 +1100,8 @@ def main():
       strAction = "FIX"
     elif bMikrotik:
       strAction = "MIKROTIK"
-
+    elif bConvert:
+      strAction = "CONVERT"
   LogEntry("Selected action: {}".format(strAction),0)
 
   if FetchEnv("PROXY") is not None:
@@ -1616,6 +1621,16 @@ def main():
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
       iLocalCount = countLocalAttributes(lstProdAttribs)
+      if strAction == "CONVERT":
+        bUpdate, lstAttrib = ConvertLocalAttributes(lstProdAttribs, strBaseURL, strWCKey, strWCSecret)
+        if bUpdate:
+          dictResult = UpdateWooCommerceProduct({"attributes": lstAttrib}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+          if dictResult[0]["Success"]:
+            LogEntry("Successfully converted local attributes to global for product {} with SKU {} and name {}".format(
+              dictProduct["id"], dictProduct["sku"], dictProduct["name"]),0)
+          else:
+            LogEntry("Failed to convert local attributes for product {} with SKU {} and name {}. Error: {}".format(
+              dictProduct["id"], dictProduct["sku"], dictProduct["name"], dictResult[1]),0)
       if strAction != "MIKROTIK":
         LogEntry("Working on product {} with SKU {} and name {}. "
                "It has {} existing attributes and {} attributes in the description.".format(
