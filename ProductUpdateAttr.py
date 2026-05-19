@@ -8,9 +8,7 @@ Copyright 2026 Siggi Bjarnason
 Following packages need to be installed
 pip install requests
 pip install sentry_sdk
-pip install argparse
 pip install onepassword-sdk
-pip install asyncio
 pip install beautifulsoup4
 pip install anthropic
 
