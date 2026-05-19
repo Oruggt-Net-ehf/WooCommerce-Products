@@ -276,9 +276,13 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
       LogEntry("Expected list of attributes, got {} instead".format(type(lstAttributes)), 0, False)
       return 0, False, []
     for dictAttribute in lstAttributes:
+      bVariation = dictAttribute.get("variation", False)
       if dictAttribute.get("id") == 0:
+        if bVariation:
+          LogEntry("Attribute {} is used for variation, skipping conversion.".format(dictAttribute.get("name", "")), 0)
+          continue
         strAttrName = dictAttribute.get("name", "").strip().lower()
-        if strAttrName == "type":
+        if strAttrName == "type" or strAttrName == "category":
           continue
         if strAttrName in dictGlobalAttributes:
           iAttrID = dictGlobalAttributes[strAttrName]
@@ -292,7 +296,6 @@ def ConvertLocalAttributes(lstAttributes:list, strBaseURL:str, strWCKey:str, str
         else:
           bChanged = True
           iCount += 1
-          bVariation = dictAttribute.get("variation", False)
           dictGlobalAttr = {}
           dictGlobalAttr["id"] = iAttrID
           dictGlobalAttr["name"] = dictAttribute.get("name", "")
@@ -1638,6 +1641,10 @@ def main():
     LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts),1)
     iPage += 1
     for dictProduct in dictProducts:
+      strType = dictProduct.get("type","")
+      if strType == "pw-gift-card":
+        LogEntry("Product {} name {} is a gift card, skipping.".format(dictProduct["id"], dictProduct["name"]),0)
+        continue
       if "description" not in dictProduct or dictProduct["description"] is None:
         LogEntry("Product {} with SKU {} and name {} has no description, skipping.".format(dictProduct["id"],
                                                                 dictProduct["sku"], dictProduct["name"]),0)
