@@ -1766,6 +1766,17 @@ def main():
             len(StripHTML(dictProduct["description"])), len(lstProdAttribs), iLocalCount, len(dictAttributes)))
         objFileOut.flush()
 
+  if lstReport:
+    strMTOutFileName = strOutDir + "Mikrotik.csv"
+    LogEntry("Writing out the MikroTik report. Output file is {}".format(strMTOutFileName),0)
+    objMTFileOut = GetFileHandle(strMTOutFileName, "w")
+    if objMTFileOut is None or isinstance(objMTFileOut, str):
+      objMTFileOut = None
+      LogEntry("Unable to open output file {}, error: {}".format(strMTOutFileName, objMTFileOut),0,True)
+    for dictItem in lstReport:
+      objMTFileOut.write("{},{}\n".format(dictItem["code"], dictItem["count"]))
+    objMTFileOut.close()
+
   if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
     # For MikroTik action, post the stock levels to the MikroTik API. The API expects a list of items with code and count, and the API key for authentication.
     LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikURL, len(lstReport)),0)
