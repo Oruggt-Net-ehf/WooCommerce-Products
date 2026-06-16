@@ -33,10 +33,10 @@ from onepassword import Client, DesktopAuth
 from bs4 import BeautifulSoup, Tag
 from anthropic import Anthropic
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, SimpleDocTemplate, HRFlowable, PageBreak
 from reportlab.lib.units import inch, cm, mm
 from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
 
 
 # End imports
@@ -999,7 +999,7 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-def ParseHtmlToFlowables(strHtml, objStyles):
+def ParseHtmlToFlowables(strHtml):
   lstFlowables = []
   objSoup = BeautifulSoup(strHtml, features="html.parser")
 
@@ -1076,11 +1076,16 @@ def main():
   global tPageSize
   global fSpaceAfterHeader
   global fSpaceAfterParagraph
+  global fSpaceAfterSection
+  global objStyles
+
+  objStyles = getSampleStyleSheet()
 
   fUnit = mm
   tPageSize = A4
   fSpaceAfterHeader = 2.0
   fSpaceAfterParagraph = 3.0
+  fSpaceAfterSection = 6.0
 
   dictProxies = {}
   strOutDir = None
@@ -1116,9 +1121,9 @@ def main():
   objParser.add_argument("--convert", dest="convert",
                       action="store_true", help="Action directive. Convert local attributes to global ones."
                       "Required unless you specify another action, only one action can be specified.")
-  objParser.add_argument("-e","--export", dest="export", action="store_true",
-                         help="Export all products to a CSV file and/or PDF based on config, "
-                         "no updates will be made.")
+  objParser.add_argument("--export", dest="export", action="store_true",
+                         help="Action directive. Export all products to a CSV file and/or PDF based on config, "
+                         "no updates will be made. Required unless you specify another action, only one action can be specified.")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
@@ -1177,15 +1182,15 @@ def main():
   LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
-  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bConvert])
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bExport, bConvert])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, --fix, --mikrotik or --convert can be used.",0)
+             "Only one of --audit, --update, --import, --fix, --mikrotik, --export or --convert can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
-    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT or MIKROTIK: ")
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT, EXPORT or MIKROTIK: ")
     strAction = strAction.upper()
-    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "MIKROTIK"]:
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "EXPORT", "MIKROTIK"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
   if iActionCount == 1:
     # Determine and set the action string
@@ -1201,6 +1206,8 @@ def main():
       strAction = "MIKROTIK"
     elif bConvert:
       strAction = "CONVERT"
+    elif bExport:
+      strAction = "EXPORT"
   LogEntry("Selected action: {}".format(strAction),0)
 
   if FetchEnv("PROXY") is not None:
@@ -1254,6 +1261,7 @@ def main():
     fPriceAdjust = 0.0
   strExportTypes = objConfig.get("Generic", "ExportTypes", fallback="csv,pdf").lower()
   strExportTypes = strExportTypes.replace(" ","")
+  lstExportTypes = strExportTypes.split(",")
   strUnits = objConfig.get("Generic", "Units", fallback="mm").lower()
   if strUnits not in ["mm", "cm", "in"]:
     LogEntry("Invalid Units specified in config. Must be 'mm', 'cm', or 'in', case insensitive. Defaulting to 'mm'.",0)
@@ -1269,12 +1277,15 @@ def main():
     LogEntry("Invalid PDFPageSize specified in config. Must be 'A4' or 'letter', case insensitive. Defaulting to 'A4'.",0)
     strPDFPageSize = "A4"
   if strPDFPageSize == "A4":
-    tplPDFPageSize = A4
+    tPageSize = A4
   else:
-    tplPDFPageSize = letter
+    tPageSize = letter
   strPDFMargins = objConfig.get("Generic", "PDFMargins", fallback="10,10,10,10")
   strPDFMargins = strPDFMargins.replace(" ","")
   lstPDFMargins = strPDFMargins.split(",")
+  if len(lstPDFMargins) != 4 or not all(isNum(margin) for margin in lstPDFMargins):
+    LogEntry("Invalid PDFMargins specified in config. Must be four numbers separated by commas, case insensitive. Defaulting to 10,10,10,10.",0)
+    lstPDFMargins = [10,10,10,10]
   strSpaceAfterHeader = objConfig.get("Generic", "AfterHeader", fallback="2")
   if isNum(strSpaceAfterHeader):
     fSpaceAfterHeader = float(strSpaceAfterHeader)
@@ -1287,6 +1298,12 @@ def main():
   else:
     LogEntry("AfterParagraph value in config is not a number, defaulting to 3",0)
     fSpaceAfterParagraph = 3.0
+  strSpaceAfterSection = objConfig.get("Generic", "AfterSection", fallback="6")
+  if isNum(strSpaceAfterSection):
+    fSpaceAfterSection = float(strSpaceAfterSection)
+  else:
+    LogEntry("AfterSection value in config is not a number, defaulting to 6",0)
+    fSpaceAfterSection = 6.0
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1699,6 +1716,26 @@ def main():
     if strFixCategory is not None:
       strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
 
+  if strAction == "EXPORT":
+    # Here is the export function initialized
+    if "csv" in lstExportTypes:
+      strCSVOutFileName = strOutDir + "ProdCataLog.csv"
+      LogEntry("Starting export of product descriptions in CSV format. Output file is {}".format(strCSVOutFileName),0)
+      objCSVFileOut = GetFileHandle(strCSVOutFileName, "w")
+      if objCSVFileOut is None or isinstance(objCSVFileOut, str):
+        objCSVFileOut = None
+        LogEntry("Unable to open output file {}, error: {}".format(strCSVOutFileName, objCSVFileOut),0,True)
+      objCSVFileOut.write("Brand,SKU,Name,Type,Status,Description\n")
+    if "pdf" in lstExportTypes:
+      strPDFOutFileName = strOutDir + "ProdCataLog.pdf"
+      LogEntry("Starting export of product descriptions in PDF format. Output file is {}".format(strPDFOutFileName),0)
+      objPDFDoc = SimpleDocTemplate(strPDFOutFileName, pagesize=tPageSize,
+                                    rightMargin=fUnit*float(lstPDFMargins[0]),
+                                    leftMargin=fUnit*float(lstPDFMargins[1]),
+                                    topMargin=fUnit*float(lstPDFMargins[2]),
+                                    bottomMargin=fUnit*float(lstPDFMargins[3]))
+      lstStory = []
+
   if strAction == "AUDIT":
     # Here is the Audit function initialized
     if bTimeStampAudit:
@@ -1873,6 +1910,20 @@ def main():
             LogEntry("Failed to update product {} with new attributes. "
                       "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
+      if strAction == "EXPORT":
+        # write out the description to the export file(s)
+        if "csv" in lstExportTypes and objCSVFileOut is not None:
+          objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
+            dictProduct["name"].replace(","," ").strip(), dictProduct["type"], dictProduct["description"].replace("\"","\"\"").strip()))
+          objCSVFileOut.flush()
+        if "pdf" in lstExportTypes and objPDFDoc is not None:
+          lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
+          for objFlowable in lstDescFlowables:
+            lstStory.append(objFlowable)
+          lstStory.append(Spacer(1, fSpaceAfterSection * fUnit))
+          lstStory.append(HRFlowable(width="100%", thickness=0.5, color=colors.grey))
+          lstStory.append(Spacer(1, fSpaceAfterSection * fUnit))
+
       if strAction == "AUDIT":
         # write out the audit file
         objFileOut.write("{},{},{},{},{},{},{},{},{},{}\n".format(strBrand.strip(), dictProduct["sku"],
@@ -1907,6 +1958,12 @@ def main():
   if objFileOut is not None:
     objFileOut.close()
     LogEntry("Audit file {} closed".format(strOutFileName),0)
+  if objCSVFileOut is not None:
+    objCSVFileOut.close()
+    LogEntry("CSV export file {} closed".format(strCSVOutFileName),0)
+  if objPDFDoc is not None:
+    objPDFDoc.build(lstStory)
+    LogEntry("PDF export written to file {}".format(strPDFOutFileName),0)
 
   if strHeartBeatURL:
     WebResponse = MakeAPICall(strHeartBeatURL,{},"HEAD")
