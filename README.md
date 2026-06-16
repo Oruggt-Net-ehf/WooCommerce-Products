@@ -74,11 +74,12 @@ pip install requests\
 pip install sentry_sdk\
 pip install onepassword-sdk\
 pip install beautifulsoup4\
-pip install anthropic
+pip install anthropic\
+pip install reportlab
 
 ### CLI Explained
 
-`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
+`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [--export] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
 
 WooCommerce Product description parser and attrib creator. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
 
@@ -91,6 +92,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
   `--fix`                Action directive. Fix product descriptions by passing existing product name to Claude and asking for new descriptions. Required unless you specify another action, only one action can be specified.\
   `--mikrotik`           Action directive. Update stock level with Mikrotik.Required unless you specify another action, only one action can be specified.
   `--convert`            Action directive. Convert local attributes to global ones.Required unless you specify another action, only one action can be specified.
+  `--export`             Action directive. Export all products to a CSV file and/or PDF based on config, no updates will be made. Required unless you specify another action, only one action can be specified.
   `-c, --config CONFIG`  Path to the configuration file. Optional. Defaults to ProductUpdateAttr.ini in the same directory as the script.\
   `-v, --verbosity`      Verbose output, vv level 2 vvvv level 4\
   `-x, --proxy PROXY`    Proxy to use for API calls. Optional\

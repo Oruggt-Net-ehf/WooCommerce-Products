@@ -1376,11 +1376,11 @@ def main():
     LogEntry("AfterSection value in config ({}) is not a number, defaulting to 6".format(strSpaceAfterSection),0)
     fSpaceAfterSection = 6.0
 
-  strLogoPath = objConfig.get("Report Export", "LogoPath", fallback="")
-  LogEntry("LogoPath is set to: {}".format(strLogoPath), 0)
-  if strLogoPath != "" and not os.path.isfile(strLogoPath):
+  strLogoFilePath = objConfig.get("Report Export", "CompanyLogo", fallback="")
+  LogEntry("LogoPath is set to: {}".format(strLogoFilePath), 0)
+  if strLogoFilePath != "" and not os.path.isfile(strLogoFilePath):
     LogEntry("LogoPath specified in config does not exist, ignoring it.",0)
-    strLogoPath = ""
+    strLogoFilePath = ""
   strCompanyName = objConfig.get("Report Export", "CompanyName", fallback="Nameless Company")
   if strCompanyName == "":
     LogEntry("CompanyName not specified in config, so report will be nameless",0)
@@ -1834,14 +1834,14 @@ def main():
       if strAddress != "":
         lstStory.append(Paragraph(strAddress, objStyles["Normal"]))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
-      if strLogoPath != "":
-        objPILImg = PILImage.open(strLogoPath)
+      if strLogoFilePath != "":
+        objPILImg = PILImage.open(strLogoFilePath)
         iWidth, iHeight = objPILImg.size
         fAspect = iHeight / iWidth
 
         fImgWidth = fLogoSize * fUnit
         fImgHeight = fImgWidth * fAspect
-        lstStory.append(Image(strLogoPath, width=fImgWidth, height=fImgHeight))
+        lstStory.append(Image(strLogoFilePath, width=fImgWidth, height=fImgHeight))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(PageBreak())
 
