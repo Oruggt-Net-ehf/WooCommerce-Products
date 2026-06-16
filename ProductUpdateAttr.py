@@ -1737,6 +1737,7 @@ def main():
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
+  lstTaxes, strBaseCountry, strPricesIncludeTax = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
 
   if strAction == "IMPORT":
     # The Import action takes place here
@@ -1788,7 +1789,7 @@ def main():
       if objCSVFileOut is None or isinstance(objCSVFileOut, str):
         objCSVFileOut = None
         LogEntry("Unable to open output file {}, error: {}".format(strCSVOutFileName, objCSVFileOut),0,True)
-      objCSVFileOut.write("Brand,SKU,Name,Type,Status,Description\n")
+      objCSVFileOut.write("Brand,SKU,Name,Price,Description\n")
     if "pdf" in lstExportTypes:
       strPDFOutFileName = strOutDir + "ProdCataLog.pdf"
       LogEntry("Starting export of product descriptions in PDF format. Output file is {}".format(strPDFOutFileName),0)
@@ -1900,6 +1901,16 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
+      if strPricesIncludeTax == "no":
+        fTaxRate = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""))
+        if fTaxRate is not None:
+          fTaxMultiplier = 1 + (fTaxRate/100)
+          fPriceIncTax = float(dictProduct.get("regular_price",0)) * fTaxMultiplier
+        else:
+          LogEntry("Couldn't find tax rate for product {}, can't calculate price including tax.".format(dictProduct["name"]),0)
+      else:
+          fPriceIncTax = float(dictProduct.get("regular_price",0))
+
       strBrand = "No Brand"
       lstBrands = dictProduct["brands"]
       if isinstance(lstBrands, list):
@@ -1994,16 +2005,19 @@ def main():
 
       if strAction == "EXPORT":
         # write out the description to the export file(s)
+        fCatalogPrice = fPriceIncTax * fPriceAdjust
         if "csv" in lstExportTypes and objCSVFileOut is not None:
           objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), dictProduct["type"], dictProduct["description"].replace("\"","\"\"").strip()))
+            dictProduct["name"].replace(","," ").strip(), fCatalogPrice, dictProduct["description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
           lstStory.append(Paragraph(dictProduct["name"].replace(","," ").strip(), objStyles["Heading1"]))
+          lstStory.append(Spacer(1, fSpaceAfterHeader * fUnit))
           if strBrand.strip() !="No Brand":
             lstStory.append(Paragraph(strBrand.strip(), objStyles["Heading2"]))
           lstStory.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
-          lstStory.append(Paragraph("<b>Price:</b> {}".format(dictProduct["type"]), objStyles["Normal"]))
+          lstStory.append(Paragraph("<b>Price:</b> {}".format(fCatalogPrice), objStyles["Normal"]))
+          lstStory.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           for objFlowable in lstDescFlowables:
             lstStory.append(objFlowable)
