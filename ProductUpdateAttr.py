@@ -771,7 +771,7 @@ def isNum(CheckValue:any)->bool:
   Returns:
     Boolean indicating if the object is a valid number or not.
   """
-  if not isinstance(CheckValue,bool):
+  if isinstance(CheckValue,bool):
     return False
   if not isinstance(CheckValue, (float, int, str)):
     return False
@@ -1377,6 +1377,7 @@ def main():
     fSpaceAfterSection = 6.0
 
   strLogoPath = objConfig.get("Report Export", "LogoPath", fallback="")
+  LogEntry("LogoPath is set to: {}".format(strLogoPath), 0)
   if strLogoPath != "" and not os.path.isfile(strLogoPath):
     LogEntry("LogoPath specified in config does not exist, ignoring it.",0)
     strLogoPath = ""
