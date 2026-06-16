@@ -33,7 +33,7 @@ from onepassword import Client, DesktopAuth
 from bs4 import BeautifulSoup, Tag
 from anthropic import Anthropic
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, SimpleDocTemplate, HRFlowable, PageBreak, Image
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, SimpleDocTemplate, HRFlowable, PageBreak, Image, KeepTogether
 from PIL import Image as PILImage
 from reportlab.lib.units import inch, cm, mm
 from reportlab.lib import colors
@@ -1852,7 +1852,7 @@ def main():
         lstStory.append(Paragraph(strCompanyName, objCenteredH3))
         lstStory.append(Paragraph(strAddress, objCenteredH3))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
-
+      lstStory.append(Paragraph(strBaseURL, objCenteredH2))
       lstStory.append(PageBreak())
 
 
@@ -2069,11 +2069,13 @@ def main():
             strName = "{} {}".format(strBrand.strip(), dictProduct["name"].replace(","," ").strip())
           else:
             strName = dictProduct["name"].replace(","," ").strip()
-          lstStory.append(Paragraph(strName, objStyles["Heading1"]))
-          lstStory.append(Spacer(1, fSpaceAfterHeader * fUnit))
-          lstStory.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
-          lstStory.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
-          lstStory.append(Spacer(1, fSpaceAfterParagraph * fUnit))
+          lstKeep = []
+          lstKeep.append(Paragraph(strName, objStyles["Heading1"]))
+          lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
+          lstKeep.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
+          lstKeep.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
+          lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
+          lstStory.append(KeepTogether(lstKeep))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           for objFlowable in lstDescFlowables:
             lstStory.append(objFlowable)
