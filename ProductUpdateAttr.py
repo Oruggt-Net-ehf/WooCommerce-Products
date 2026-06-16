@@ -38,6 +38,8 @@ from PIL import Image as PILImage
 from reportlab.lib.units import inch, cm, mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
 
 
 # End imports
@@ -54,6 +56,20 @@ strDefMetricEndPoint = "metrics" # Endpoint to submit metrics to, appended to th
 strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where the 1Password token is stored, if using token for auth
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
+
+dictCurrencySymbols = {
+    "EUR": "€",
+    "ISK": "kr",
+    "SEK": "kr",
+    "DKK": "kr",
+    "NOK": "kr",
+    "GBP": "£",
+    "CHF": "CHF",
+    "PLN": "zł",
+    "CZK": "Kč",
+    "HUF": "Ft",
+    "RON": "lei",
+}
 
 def CustomExcepthook(clsType, objValue, objTraceback):
   strLocation = GetExceptionLocation(objTraceback)
@@ -504,7 +520,10 @@ def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
   for dictSetting in lstSettings:
     if dictSetting.get("id") == "woocommerce_default_country":
       strBaseCountry = dictSetting.get("value").split(":")[0]
-      break
+    elif dictSetting.get("id") == "woocommerce_currency":
+      strCurrency = dictSetting.get("value")
+    elif dictSetting.get("id") == "woocommerce_currency_pos":
+      strCurrencyPos = dictSetting.get("value")
   strEndPoint = "/wp-json/wc/v3/settings/tax"
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
@@ -516,7 +535,7 @@ def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
     if dictSetting.get("id") == "woocommerce_prices_include_tax":
       strPricesIncludeTax = dictSetting.get("value")
       break
-  return lstTaxes, strBaseCountry, strPricesIncludeTax
+  return lstTaxes, strBaseCountry, strPricesIncludeTax, strCurrency, strCurrencyPos
 
 def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->dict:
   LogEntry("Loading values from {}".format(strEndPoint),1)
@@ -1124,8 +1143,14 @@ def main():
   global fSpaceAfterParagraph
   global fSpaceAfterSection
   global objStyles
+  global objCenteredNormal
+  global objCenteredH1
+  global objCenteredH2
 
   objStyles = getSampleStyleSheet()
+  objCenteredNormal = ParagraphStyle(name="Centered", parent=objStyles["Normal"], alignment=TA_CENTER)
+  objCenteredH1 = ParagraphStyle(name="CenteredH1", parent=objStyles["Heading1"], alignment=TA_CENTER)
+  objCenteredH2 = ParagraphStyle(name="CenteredH2", parent=objStyles["Heading2"], alignment=TA_CENTER)
 
   fUnit = mm
   tPageSize = A4
@@ -1737,9 +1762,9 @@ def main():
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
-  lstTaxes, strBaseCountry, strPricesIncludeTax = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
-  LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes)),0)
-
+  lstTaxes, strBaseCountry, strPricesIncludeTax, strCurrency, strCurrencyPos = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
+  LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos),0)
+  strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
   if strAction == "IMPORT":
     # The Import action takes place here
     LogEntry("Now starting import action...",0)
@@ -1801,8 +1826,8 @@ def main():
                                     bottomMargin=fUnit*float(lstPDFMargins[3]))
       lstStory = []
       lstStory.append(Paragraph(strCompanyName, objStyles["Title"]))
-      lstStory.append(Paragraph("Product Catalog", objStyles["Heading1"]))
-      lstStory.append(Paragraph("Generate on {}".format(dtNow), objStyles["Normal"]))
+      lstStory.append(Paragraph("Product Catalog", objCenteredH1))
+      lstStory.append(Paragraph("Generate on {}".format(dtNow), objCenteredNormal))
       lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(Paragraph(strCompanyName, objStyles["Normal"]))
       if strAddress != "":
@@ -1911,7 +1936,14 @@ def main():
           LogEntry("Couldn't find tax rate for product {}, can't calculate price including tax.".format(dictProduct["name"]),0)
       else:
           fPriceIncTax = float(dictProduct.get("regular_price",0))
-
+      if strCurrencyPos == "left":
+          strFormattedPrice = "{}{:.2f}".format(strCurrencySymbol, fPriceIncTax)
+      elif strCurrencyPos == "right":
+          strFormattedPrice = "{:.2f}{}".format(fPriceIncTax, strCurrencySymbol)
+      elif strCurrencyPos == "left_space":
+          strFormattedPrice = "{} {:.2f}".format(strCurrencySymbol, fPriceIncTax)
+      elif strCurrencyPos == "right_space":
+          strFormattedPrice = "{:.2f} {}".format(fPriceIncTax, strCurrencySymbol)
       strBrand = "No Brand"
       lstBrands = dictProduct["brands"]
       if isinstance(lstBrands, list):
@@ -2007,9 +2039,17 @@ def main():
       if strAction == "EXPORT":
         # write out the description to the export file(s)
         fCatalogPrice = fPriceIncTax * fPriceAdjust
+        if strCurrencyPos == "left":
+            strFormattedPrice = "{}{:.2f}".format(strCurrencySymbol, fCatalogPrice)
+        elif strCurrencyPos == "right":
+            strFormattedPrice = "{:.2f}{}".format(fCatalogPrice, strCurrencySymbol)
+        elif strCurrencyPos == "left_space":
+            strFormattedPrice = "{} {:.2f}".format(strCurrencySymbol, fCatalogPrice)
+        elif strCurrencyPos == "right_space":
+            strFormattedPrice = "{:.2f} {}".format(fCatalogPrice, strCurrencySymbol)
         if "csv" in lstExportTypes and objCSVFileOut is not None:
           objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), fCatalogPrice, dictProduct["description"].replace("\"","\"\"").strip()))
+            dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
           lstStory.append(Paragraph(dictProduct["name"].replace(","," ").strip(), objStyles["Heading1"]))
@@ -2017,7 +2057,7 @@ def main():
           if strBrand.strip() !="No Brand":
             lstStory.append(Paragraph(strBrand.strip(), objStyles["Heading2"]))
           lstStory.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
-          lstStory.append(Paragraph("<b>Price:</b> {}".format(fCatalogPrice), objStyles["Normal"]))
+          lstStory.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
           lstStory.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           for objFlowable in lstDescFlowables:
