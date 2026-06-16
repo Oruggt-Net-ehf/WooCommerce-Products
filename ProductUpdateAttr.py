@@ -1783,7 +1783,7 @@ def main():
   if strAction == "EXPORT":
     # Here is the export function initialized
     if "csv" in lstExportTypes:
-      strCSVOutFileName = strOutDir + "ProdCataLog.csv"
+      strCSVOutFileName = strOutDir + "ProdCatalog.csv"
       LogEntry("Starting export of product descriptions in CSV format. Output file is {}".format(strCSVOutFileName),0)
       objCSVFileOut = GetFileHandle(strCSVOutFileName, "w")
       if objCSVFileOut is None or isinstance(objCSVFileOut, str):
@@ -1791,7 +1791,7 @@ def main():
         LogEntry("Unable to open output file {}, error: {}".format(strCSVOutFileName, objCSVFileOut),0,True)
       objCSVFileOut.write("Brand,SKU,Name,Price,Description\n")
     if "pdf" in lstExportTypes:
-      strPDFOutFileName = strOutDir + "ProdCataLog.pdf"
+      strPDFOutFileName = strOutDir + "ProdCatalog.pdf"
       LogEntry("Starting export of product descriptions in PDF format. Output file is {}".format(strPDFOutFileName),0)
       objPDFDoc = SimpleDocTemplate(strPDFOutFileName, pagesize=tPageSize,
                                     rightMargin=fUnit*float(lstPDFMargins[0]),
