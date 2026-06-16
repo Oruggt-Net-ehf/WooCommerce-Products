@@ -33,7 +33,8 @@ from onepassword import Client, DesktopAuth
 from bs4 import BeautifulSoup, Tag
 from anthropic import Anthropic
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, SimpleDocTemplate, HRFlowable, PageBreak
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, SimpleDocTemplate, HRFlowable, PageBreak, Image
+from PIL import Image as PILImage
 from reportlab.lib.units import inch, cm, mm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
@@ -481,6 +482,41 @@ def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, s
 
     LogEntry("Successfully updated product ID: {}".format(iProductID), 2)
     return dictResponse
+
+def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
+  LogEntry("Loading tax details",1)
+  dictHeader = {}
+  strMethod = "get"
+  strEndPoint = "/wp-json/wc/v3/taxes"
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+    return{}
+  lstTaxes = dictResponse[1]
+  strEndPoint = "/wp-json/wc/v3/settings/general"
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+    return{}
+  lstSettings = dictResponse[1]
+  for dictSetting in lstSettings:
+    if dictSetting.get("id") == "woocommerce_default_country":
+      strBaseCountry = dictSetting.get("value").split(":")[0]
+      break
+  strEndPoint = "/wp-json/wc/v3/settings/tax"
+  strURL = strBaseURL + strEndPoint
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
+    return{}
+  lstSettings = dictResponse[1]
+  for dictSetting in lstSettings:
+    if dictSetting.get("id") == "woocommerce_prices_include_tax":
+      strPricesIncludeTax = dictSetting.get("value")
+      break
+  return lstTaxes, strBaseCountry, strPricesIncludeTax
 
 def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->dict:
   LogEntry("Loading values from {}".format(strEndPoint),1)
@@ -1049,6 +1085,16 @@ def ParseHtmlToFlowables(strHtml):
 
   return lstFlowables
 
+def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
+  if strTaxClass == "":
+    strTaxClass = "standard"
+
+  for dctTax in lstTaxes:
+    if dctTax.get("country") == strBaseCountry and dctTax.get("class") == strTaxClass:
+      return float(dctTax.get("rate"))
+
+  return None
+
 def main():
   global str1PassToken
   global bQuiet
@@ -1253,16 +1299,16 @@ def main():
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
-  strPriceAdjust = objConfig.get("Generic", "ExportPriceAdjust", fallback="0")
+  strPriceAdjust = objConfig.get("Report Export", "ExportPriceAdjust", fallback="0")
   if isNum(strPriceAdjust):
     fPriceAdjust = float(strPriceAdjust)
   else:
     LogEntry("ExportPriceAdjust value in config is not a number, defaulting to 0",0)
     fPriceAdjust = 0.0
-  strExportTypes = objConfig.get("Generic", "ExportTypes", fallback="csv,pdf").lower()
+  strExportTypes = objConfig.get("Report Export", "ExportTypes", fallback="csv,pdf").lower()
   strExportTypes = strExportTypes.replace(" ","")
   lstExportTypes = strExportTypes.split(",")
-  strUnits = objConfig.get("Generic", "Units", fallback="mm").lower()
+  strUnits = objConfig.get("Report Export", "Units", fallback="mm").lower()
   if strUnits not in ["mm", "cm", "in"]:
     LogEntry("Invalid Units specified in config. Must be 'mm', 'cm', or 'in', case insensitive. Defaulting to 'mm'.",0)
     strUnits = "mm"
@@ -1272,7 +1318,7 @@ def main():
     fUnit=cm
   else:
     fUnit=inch
-  strPDFPageSize = objConfig.get("Generic", "PDFPageSize", fallback="A4").upper()
+  strPDFPageSize = objConfig.get("Report Export", "PDFPageSize", fallback="A4").upper()
   if strPDFPageSize not in ["A4", "LETTER"]:
     LogEntry("Invalid PDFPageSize specified in config. Must be 'A4' or 'letter', case insensitive. Defaulting to 'A4'.",0)
     strPDFPageSize = "A4"
@@ -1280,30 +1326,47 @@ def main():
     tPageSize = A4
   else:
     tPageSize = letter
-  strPDFMargins = objConfig.get("Generic", "PDFMargins", fallback="10,10,10,10")
+  strPDFMargins = objConfig.get("Report Export", "PDFMargins", fallback="10,10,10,10")
   strPDFMargins = strPDFMargins.replace(" ","")
   lstPDFMargins = strPDFMargins.split(",")
   if len(lstPDFMargins) != 4 or not all(isNum(margin) for margin in lstPDFMargins):
     LogEntry("Invalid PDFMargins specified in config. Must be four numbers separated by commas, case insensitive. Defaulting to 10,10,10,10.",0)
     lstPDFMargins = [10,10,10,10]
-  strSpaceAfterHeader = objConfig.get("Generic", "AfterHeader", fallback="2")
+  strSpaceAfterHeader = objConfig.get("Report Export", "AfterHeader", fallback="2")
   if isNum(strSpaceAfterHeader):
     fSpaceAfterHeader = float(strSpaceAfterHeader)
   else:
     LogEntry("AfterHeader value in config is not a number, defaulting to 2",0)
     fSpaceAfterHeader = 2.0
-  strSpaceAfterParagraph = objConfig.get("Generic", "AfterParagraph", fallback="3")
+  strSpaceAfterParagraph = objConfig.get("Report Export", "AfterParagraph", fallback="3")
   if isNum(strSpaceAfterParagraph):
     fSpaceAfterParagraph = float(strSpaceAfterParagraph)
   else:
     LogEntry("AfterParagraph value in config is not a number, defaulting to 3",0)
     fSpaceAfterParagraph = 3.0
-  strSpaceAfterSection = objConfig.get("Generic", "AfterSection", fallback="6")
+  strSpaceAfterSection = objConfig.get("Report Export", "AfterSection", fallback="6")
   if isNum(strSpaceAfterSection):
     fSpaceAfterSection = float(strSpaceAfterSection)
   else:
     LogEntry("AfterSection value in config is not a number, defaulting to 6",0)
     fSpaceAfterSection = 6.0
+
+  strLogoPath = objConfig.get("Report Export", "LogoPath", fallback="")
+  if strLogoPath != "" and not os.path.isfile(strLogoPath):
+    LogEntry("LogoPath specified in config does not exist, ignoring it.",0)
+    strLogoPath = ""
+  strCompanyName = objConfig.get("Report Export", "CompanyName", fallback="Nameless Company")
+  if strCompanyName == "":
+    LogEntry("CompanyName not specified in config, so report will be nameless",0)
+  strAddress = objConfig.get("Report Export", "Address", fallback="")
+  strAddress = strAddress.replace("\n", "<br/>")
+  strLogoSize = objConfig.get("Report Export", "LogoSize", fallback="50")
+  if isNum(strLogoSize):
+    fLogoSize = float(strLogoSize)
+  else:
+    LogEntry("LogoSize value in config is not a number, defaulting to 50",0)
+    fLogoSize = 50.0
+
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1735,6 +1798,25 @@ def main():
                                     topMargin=fUnit*float(lstPDFMargins[2]),
                                     bottomMargin=fUnit*float(lstPDFMargins[3]))
       lstStory = []
+      lstStory.append(Paragraph(strCompanyName, objStyles["Title"]))
+      lstStory.append(Paragraph("Product Catalog", objStyles["Heading1"]))
+      lstStory.append(Paragraph("Generate on {}".format(dtNow), objStyles["Normal"]))
+      lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
+      lstStory.append(Paragraph(strCompanyName, objStyles["Normal"]))
+      if strAddress != "":
+        lstStory.append(Paragraph(strAddress, objStyles["Normal"]))
+        lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
+      if strLogoPath != "":
+        objPILImg = PILImage.open(strLogoPath)
+        iWidth, iHeight = objPILImg.size
+        fAspect = iHeight / iWidth
+
+        fImgWidth = fLogoSize * fUnit
+        fImgHeight = fImgWidth * fAspect
+        lstStory.append(Image(strLogoPath, width=fImgWidth, height=fImgHeight))
+        lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
+      lstStory.append(PageBreak())
+
 
   if strAction == "AUDIT":
     # Here is the Audit function initialized
@@ -1917,6 +1999,11 @@ def main():
             dictProduct["name"].replace(","," ").strip(), dictProduct["type"], dictProduct["description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
+          lstStory.append(Paragraph(dictProduct["name"].replace(","," ").strip(), objStyles["Heading1"]))
+          if strBrand.strip() !="No Brand":
+            lstStory.append(Paragraph(strBrand.strip(), objStyles["Heading2"]))
+          lstStory.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
+          lstStory.append(Paragraph("<b>Price:</b> {}".format(dictProduct["type"]), objStyles["Normal"]))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           for objFlowable in lstDescFlowables:
             lstStory.append(objFlowable)
