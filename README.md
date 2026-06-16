@@ -130,21 +130,21 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000)*\
 
-[Report Export]
-ExportPriceAdjust = 1.8
-ExportTypes = csv,pdf
-Units = mm
-PDFPageSize = A4
-PDFMargins = 20,20,25,25
-AfterHeader = 2
-AfterParagraph = 4
-AfterSection = 6
-CompanyName = Öruggt Net ehf
-Address = Kristínargata 1
- 102 Reykjavik
- Iceland
-CompanyLogo = E:\OneDrive - Öruggt Net ehf\Documents - Sölu og Markaðsteymi\content\Logo\Öruggt Net.jpg
-LogoSize = 50
+`[Report Export]`\
+`ExportPriceAdjust = 0.8` *(Adjust the price based on purpose. This example gives 20% discount across the board, for example for wholesale. 1.5 puts 50% surcharge to encourage using the webstore instead of the catalog)*\
+`ExportTypes = csv,pdf` *(Do you want both csv and pdf export, or just one or the other.)*\
+`Units = mm` *(valid options are mm, cm, and inch)*\
+`PDFPageSize = A4` *(valid options are A4 or letter)*\
+`PDFMargins = 20,20,25,25` *(right, left, top, bottom, using the units you specified above)*\
+`AfterHeader = 2` *(using units specified, how much space after a header. In this example 2 mm)*\
+`AfterParagraph = 4` *(same, just after a paragraph)*\
+`AfterSection = 6` *(same just space between sections)*\
+`CompanyName = Öruggt Net ehf` *(Title of the report)*\
+`Address = Kristínargata 1
+  102 Reykjavik
+  Iceland` *(Address, can be put on multiple lines if subsequent lines are indented)*\
+`CompanyLogo = E:\OneDrive - Öruggt Net ehf\Documents - Sölu og Markaðsteymi\content\Logo\Öruggt Net.jpg` *(Full path to the logo for the front of the report)*\
+`LogoSize = 50` *(Size of the logo on the report in units specified above)*\
 
 `[WPCreds]`\
 `VaultID = xxxxxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
