@@ -30,12 +30,13 @@ import traceback
 import platform
 import urllib.parse as urlLib
 from onepassword import Client, DesktopAuth
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from anthropic import Anthropic
 from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, PageBreak
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch, cm, mm
+from reportlab.lib import colors
 
 
 # End imports
@@ -998,6 +999,56 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
+def ParseHtmlToFlowables(strHtml, objStyles):
+  lstFlowables = []
+  objSoup = BeautifulSoup(strHtml, features="html.parser")
+
+  for objTag in objSoup.children:
+    if not isinstance(objTag, Tag):
+      continue
+
+    strTag = objTag.name.lower()
+
+    if strTag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+      strStyleName = "Heading{}".format(strTag[1])
+      lstFlowables.append(Paragraph(objTag.get_text(), objStyles[strStyleName]))
+      lstFlowables.append(Spacer(1, fSpaceAfterHeader * fUnit))
+
+    elif strTag == "p":
+      lstFlowables.append(Paragraph(objTag.decode_contents(), objStyles["Normal"]))
+      lstFlowables.append(Spacer(1, fSpaceAfterParagraph * fUnit))
+
+    elif strTag in ("ul", "ol"):
+      iCount = 1
+      for objItem in objTag.find_all("li", recursive=False):
+        if strTag == "ol":
+          strBullet = "{}. {}".format(iCount, objItem.get_text())
+          iCount = iCount + 1
+        else:
+          strBullet = "• {}".format(objItem.get_text())
+        lstFlowables.append(Paragraph(strBullet, objStyles["Normal"]))
+      lstFlowables.append(Spacer(1, fSpaceAfterParagraph * fUnit))
+
+    elif strTag == "table":
+      lstRows = []
+      for objRow in objTag.find_all("tr"):
+        lstCells = []
+        for objCell in objRow.find_all(["td", "th"]):
+          lstCells.append(objCell.get_text(strip=True))
+        lstRows.append(lstCells)
+
+      if lstRows:
+        objTable = Table(lstRows)
+        objTable.setStyle(TableStyle([
+          ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+          ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+          ("GRID",       (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        lstFlowables.append(objTable)
+        lstFlowables.append(Spacer(1, fSpaceAfterParagraph * fUnit))
+
+  return lstFlowables
+
 def main():
   global str1PassToken
   global bQuiet
@@ -1021,6 +1072,15 @@ def main():
   global strBSKey
   global strIncidentURL
   global strExitCode
+  global fUnit
+  global tPageSize
+  global fSpaceAfterHeader
+  global fSpaceAfterParagraph
+
+  fUnit = mm
+  tPageSize = A4
+  fSpaceAfterHeader = 2.0
+  fSpaceAfterParagraph = 3.0
 
   dictProxies = {}
   strOutDir = None
@@ -1192,13 +1252,41 @@ def main():
   else:
     LogEntry("ExportPriceAdjust value in config is not a number, defaulting to 0",0)
     fPriceAdjust = 0.0
-  strExportTypes = objConfig.get("Generic", "ExportTypes", fallback="csv").lower()
+  strExportTypes = objConfig.get("Generic", "ExportTypes", fallback="csv,pdf").lower()
   strExportTypes = strExportTypes.replace(" ","")
   strUnits = objConfig.get("Generic", "Units", fallback="mm").lower()
+  if strUnits not in ["mm", "cm", "in"]:
+    LogEntry("Invalid Units specified in config. Must be 'mm', 'cm', or 'in', case insensitive. Defaulting to 'mm'.",0)
+    strUnits = "mm"
+  if strUnits == "mm":
+    fUnit=mm
+  elif strUnits == "cm":
+    fUnit=cm
+  else:
+    fUnit=inch
   strPDFPageSize = objConfig.get("Generic", "PDFPageSize", fallback="A4").upper()
+  if strPDFPageSize not in ["A4", "LETTER"]:
+    LogEntry("Invalid PDFPageSize specified in config. Must be 'A4' or 'letter', case insensitive. Defaulting to 'A4'.",0)
+    strPDFPageSize = "A4"
+  if strPDFPageSize == "A4":
+    tplPDFPageSize = A4
+  else:
+    tplPDFPageSize = letter
   strPDFMargins = objConfig.get("Generic", "PDFMargins", fallback="10,10,10,10")
+  strPDFMargins = strPDFMargins.replace(" ","")
+  lstPDFMargins = strPDFMargins.split(",")
   strSpaceAfterHeader = objConfig.get("Generic", "AfterHeader", fallback="2")
+  if isNum(strSpaceAfterHeader):
+    fSpaceAfterHeader = float(strSpaceAfterHeader)
+  else:
+    LogEntry("AfterHeader value in config is not a number, defaulting to 2",0)
+    fSpaceAfterHeader = 2.0
   strSpaceAfterParagraph = objConfig.get("Generic", "AfterParagraph", fallback="3")
+  if isNum(strSpaceAfterParagraph):
+    fSpaceAfterParagraph = float(strSpaceAfterParagraph)
+  else:
+    LogEntry("AfterParagraph value in config is not a number, defaulting to 3",0)
+    fSpaceAfterParagraph = 3.0
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
