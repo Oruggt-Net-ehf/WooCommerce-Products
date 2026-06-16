@@ -1303,7 +1303,7 @@ def main():
   if isNum(strPriceAdjust):
     fPriceAdjust = float(strPriceAdjust)
   else:
-    LogEntry("ExportPriceAdjust value in config is not a number, defaulting to 0",0)
+    LogEntry("ExportPriceAdjust value in config ({}) is not a number, defaulting to 0".format(strPriceAdjust),0)
     fPriceAdjust = 0.0
   strExportTypes = objConfig.get("Report Export", "ExportTypes", fallback="csv,pdf").lower()
   strExportTypes = strExportTypes.replace(" ","")
@@ -1336,19 +1336,19 @@ def main():
   if isNum(strSpaceAfterHeader):
     fSpaceAfterHeader = float(strSpaceAfterHeader)
   else:
-    LogEntry("AfterHeader value in config is not a number, defaulting to 2",0)
+    LogEntry("AfterHeader value in config ({}) is not a number, defaulting to 2".format(strSpaceAfterHeader),0)
     fSpaceAfterHeader = 2.0
   strSpaceAfterParagraph = objConfig.get("Report Export", "AfterParagraph", fallback="3")
   if isNum(strSpaceAfterParagraph):
     fSpaceAfterParagraph = float(strSpaceAfterParagraph)
   else:
-    LogEntry("AfterParagraph value in config is not a number, defaulting to 3",0)
+    LogEntry("AfterParagraph value in config ({}) is not a number, defaulting to 3".format(strSpaceAfterParagraph),0)
     fSpaceAfterParagraph = 3.0
   strSpaceAfterSection = objConfig.get("Report Export", "AfterSection", fallback="6")
   if isNum(strSpaceAfterSection):
     fSpaceAfterSection = float(strSpaceAfterSection)
   else:
-    LogEntry("AfterSection value in config is not a number, defaulting to 6",0)
+    LogEntry("AfterSection value in config ({}) is not a number, defaulting to 6".format(strSpaceAfterSection),0)
     fSpaceAfterSection = 6.0
 
   strLogoPath = objConfig.get("Report Export", "LogoPath", fallback="")
@@ -1364,7 +1364,7 @@ def main():
   if isNum(strLogoSize):
     fLogoSize = float(strLogoSize)
   else:
-    LogEntry("LogoSize value in config is not a number, defaulting to 50",0)
+    LogEntry("LogoSize value in config ({}) is not a number, defaulting to 50".format(strLogoSize),0)
     fLogoSize = 50.0
 
 
@@ -1738,6 +1738,7 @@ def main():
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
   lstTaxes, strBaseCountry, strPricesIncludeTax = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
+  LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes)),0)
 
   if strAction == "IMPORT":
     # The Import action takes place here
