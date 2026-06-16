@@ -9,7 +9,7 @@ Script that analyzes product description in WooCommerce and turns a spec list in
 
 Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
 
-Since I'm a MikroTik master distributor and I have a requirement to sent stock reports back to HQ I also added an function that can find all the MikroTik products, take the stock and sku from WooCommerce and send it to the MikroTik API.
+Since I'm a MikroTik master distributor and I have a requirement to sent stock reports back to HQ I also added an function that can find all the MikroTik products, take the stock and sku from WooCommerce and send it to the MikroTik API as well as write a CSV stock report.
 
 Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
 
@@ -30,6 +30,10 @@ There are five main actions this script can take. You can specify the desired ac
 This action goes through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has and writes it to a csv file along with name, sku and product id.
 
 During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
+
+### Export
+
+This action will generate a product catalog in csv, pdf or both as specified in configuration file. There are various configuration items in the report section to specify how the pdf report should look like.
 
 ### Update
 
@@ -125,6 +129,22 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `MaxCharIn = 500` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000)*\
+
+[Report Export]
+ExportPriceAdjust = 1.8
+ExportTypes = csv,pdf
+Units = mm
+PDFPageSize = A4
+PDFMargins = 20,20,25,25
+AfterHeader = 2
+AfterParagraph = 4
+AfterSection = 6
+CompanyName = Öruggt Net ehf
+Address = Kristínargata 1
+ 102 Reykjavik
+ Iceland
+CompanyLogo = E:\OneDrive - Öruggt Net ehf\Documents - Sölu og Markaðsteymi\content\Logo\Öruggt Net.jpg
+LogoSize = 50
 
 `[WPCreds]`\
 `VaultID = xxxxxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
