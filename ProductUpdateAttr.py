@@ -11,6 +11,7 @@ pip install sentry_sdk
 pip install onepassword-sdk
 pip install beautifulsoup4
 pip install anthropic
+pip install reportlab
 
 '''
 # Import libraries
@@ -31,6 +32,11 @@ import urllib.parse as urlLib
 from onepassword import Client, DesktopAuth
 from bs4 import BeautifulSoup
 from anthropic import Anthropic
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch, cm, mm
+
 
 # End imports
 
@@ -700,22 +706,24 @@ def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False):
   if bAbort:
     CleanExit(strMsg,bLog=False)
 
-def isInt(CheckValue:any)->bool:
-    """
-    function to safely check if a value can be interpreded as an int
-    Parameter:
-      Value: A object to be evaluated
-    Returns:
-      Boolean indicating if the object is an integer or not.
-    """
-    if isinstance(CheckValue, (float, int, str)):
-        try:
-            fTemp = int(CheckValue)
-        except ValueError:
-            fTemp = "NULL"
-    else:
-        fTemp = "NULL"
-    return fTemp != "NULL"
+def isNum(CheckValue:any)->bool:
+  """
+  function to safely check if a value can be interpreded as a number
+  (integer or float) without throwing an error.
+  Parameter:
+    Value: A object to be evaluated
+  Returns:
+    Boolean indicating if the object is a valid number or not.
+  """
+  if not isinstance(CheckValue,bool):
+    return False
+  if not isinstance(CheckValue, (float, int, str)):
+    return False
+  try:
+      float(CheckValue)
+      return True
+  except ValueError:
+      return False
 
 def StripHTML(strHTML:str)->str:
   """
@@ -1048,6 +1056,9 @@ def main():
   objParser.add_argument("--convert", dest="convert",
                       action="store_true", help="Action directive. Convert local attributes to global ones."
                       "Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("-e","--export", dest="export", action="store_true",
+                         help="Export all products to a CSV file and/or PDF based on config, "
+                         "no updates will be made.")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
@@ -1089,6 +1100,7 @@ def main():
     sys.exit(9)
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
+  bExport = objArgs.export
   bAudit = objArgs.audit
   bUpdate = objArgs.update
   bImport = objArgs.prodimport
@@ -1174,6 +1186,20 @@ def main():
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
+  strPriceAdjust = objConfig.get("Generic", "ExportPriceAdjust", fallback="0")
+  if isNum(strPriceAdjust):
+    fPriceAdjust = float(strPriceAdjust)
+  else:
+    LogEntry("ExportPriceAdjust value in config is not a number, defaulting to 0",0)
+    fPriceAdjust = 0.0
+  strExportTypes = objConfig.get("Generic", "ExportTypes", fallback="csv").lower()
+  strExportTypes = strExportTypes.replace(" ","")
+  strUnits = objConfig.get("Generic", "Units", fallback="mm").lower()
+  strPDFPageSize = objConfig.get("Generic", "PDFPageSize", fallback="A4").upper()
+  strPDFMargins = objConfig.get("Generic", "PDFMargins", fallback="10,10,10,10")
+  strSpaceAfterHeader = objConfig.get("Generic", "AfterHeader", fallback="2")
+  strSpaceAfterParagraph = objConfig.get("Generic", "AfterParagraph", fallback="3")
+
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
       strAuthMethod = objConfig["Generic"]["AuthMethod"].strip().lower()[:3]
@@ -1231,7 +1257,7 @@ def main():
       strAIsystemFile = None
     if "MaxCharIn" in objConfig["Generic"]:
       strMaxCharIn = objConfig["Generic"]["MaxCharIn"]
-      if isInt(strMaxCharIn):
+      if isNum(strMaxCharIn):
         iMaxCharIn = int(strMaxCharIn)
       else:
         LogEntry("MaxCharIn value in config is not an integer, defaulting to 0",0)
@@ -1267,7 +1293,7 @@ def main():
     else:
       strAttrEqFile = None
     if "PerPage" in objConfig["Generic"]:
-      if isInt(objConfig["Generic"]["PerPage"]):
+      if isNum(objConfig["Generic"]["PerPage"]):
         iPerPage = int(objConfig["Generic"]["PerPage"])
       else:
         LogEntry("PerPage value in config is not an integer, defaulting to {}".format(iDefPerPage),0)
@@ -1403,7 +1429,7 @@ def main():
       objAttrEqFileHndl.close()
     else:
       LogEntry("Attribute equivalence file {} specified but not found, ignoring.".format(strAttrEqFile),0)
-  if not isInt(iMaxTokens):
+  if not isNum(iMaxTokens):
     LogEntry("MaxToken value of '{}' is not valid. Setting it to the default of {}".format(iMaxTokens,iDefMaxToken),0)
     iMaxTokens = iDefMaxToken
   else:
