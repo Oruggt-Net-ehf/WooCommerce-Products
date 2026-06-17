@@ -1118,6 +1118,14 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
 
   return None
 
+def DrawFooter(objCanvas, objDoc):
+  objCanvas.saveState()
+  objCanvas.setFont("Helvetica", 8)
+  strFooter = "My Company - Confidential"
+  objCanvas.drawCentredString(tPageSize[0] / 2, 15 * fUnit, strFooter)
+  objCanvas.drawCentredString(tPageSize[0] / 2, 10 * fUnit, "Page {}".format(objDoc.page))
+  objCanvas.restoreState()
+
 def FetchImageBuffer(strUrl):
   objResponse = requests.get(strUrl, timeout=10)
   if objResponse.status_code != 200:
@@ -1341,6 +1349,12 @@ def main():
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
   strExportFile = objConfig.get("Report Export", "ReportFileName", fallback="ProductCatalog").strip()
   strContactEmail = objConfig.get("Report Export", "ContactEmail", fallback="").strip()
+  strImgSize = objConfig.get("Report Export", "ProdImgSize", fallback="0.8")
+  if isNum(strImgSize):
+    fImgSize = float(strImgSize)
+  else:
+    LogEntry("ProdImgSize value in config ({}) is not a number, defaulting to 0.8".format(strImgSize),0)
+    fImgSize = 0.8
   strPriceAdjust = objConfig.get("Report Export", "ExportPriceAdjust", fallback="0")
   if isNum(strPriceAdjust):
     fPriceAdjust = float(strPriceAdjust)
@@ -1374,6 +1388,8 @@ def main():
   if len(lstPDFMargins) != 4 or not all(isNum(margin) for margin in lstPDFMargins):
     LogEntry("Invalid PDFMargins specified in config. Must be four numbers separated by commas, case insensitive. Defaulting to 10,10,10,10.",0)
     lstPDFMargins = [10,10,10,10]
+  else:
+    lstPDFMargins = [float(margin) for margin in lstPDFMargins]
   strSpaceAfterHeader = objConfig.get("Report Export", "AfterHeader", fallback="2")
   if isNum(strSpaceAfterHeader):
     fSpaceAfterHeader = float(strSpaceAfterHeader)
@@ -1409,6 +1425,7 @@ def main():
   else:
     LogEntry("LogoSize value in config ({}) is not a number, defaulting to 50".format(strLogoSize),0)
     fLogoSize = 50.0
+  fPageWidth = tPageSize[0] - ((lstPDFMargins[0] + lstPDFMargins[1]) * fUnit)
 
 
   if "Generic" in objConfig:
@@ -2091,8 +2108,8 @@ def main():
             objPILImg = PILImage.open(objBuffer)
             iWidth, iHeight = objPILImg.size
             fAspect = iHeight / iWidth
-            fImgWidth = fLogoSize * fUnit
-            fImgHeight = fImgWidth * fAspect
+            fImgHeight = fImgSize * fUnit
+            fImgWidth = fImgHeight / fAspect
             objBuffer.seek(0)  # Reset buffer position after PILImage reads it
             objImage = Image(objBuffer, width=fImgWidth * fUnit, height=fImgHeight * fUnit)
             lstKeep.append(objImage)
@@ -2163,7 +2180,7 @@ def main():
     objCSVFileOut.close()
     LogEntry("CSV export file {} closed".format(strCSVOutFileName),0)
   if objPDFDoc is not None:
-    objPDFDoc.build(lstStory)
+    objPDFDoc.build(lstStory, onLaterPages=DrawFooter)
     LogEntry("PDF export written to file {}".format(strPDFOutFileName),0)
 
   if strHeartBeatURL:
