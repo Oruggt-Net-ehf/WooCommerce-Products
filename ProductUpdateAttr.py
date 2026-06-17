@@ -1061,9 +1061,9 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
 def ParseHtmlToFlowables(objParent):
   lstFlowables = []
   if isinstance(objParent, str):
-    objSoup = BeautifulSoup(objParent, features="html.parser")
+    objParent = BeautifulSoup(objParent, features="html.parser")
 
-  for objTag in objSoup.children:
+  for objTag in objParent.children:
     if not isinstance(objTag, Tag):
       continue
 
