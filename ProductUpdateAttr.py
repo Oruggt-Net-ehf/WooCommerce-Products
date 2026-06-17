@@ -1121,7 +1121,7 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
 def DrawFooter(objCanvas, objDoc):
   objCanvas.saveState()
   objCanvas.setFont("Helvetica", 10)
-  strFooter = "{}  {}".format(strCompanyName, strContactEmail)
+  strFooter = "{}  {} | All prices are in {} and include Icelandic VAT".format(strCompanyName, strContactEmail, strCurrency)
   objCanvas.drawCentredString(tPageSize[0] / 2, 15 * fUnit, strFooter)
   objCanvas.drawCentredString(tPageSize[0] / 2, 10 * fUnit, "Page {}".format(objDoc.page))
   objCanvas.restoreState()
@@ -1167,6 +1167,7 @@ def main():
   global strCompanyName
   global strContactEmail
   global fPageWidth
+  global strCurrency
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1185,6 +1186,7 @@ def main():
   fSpaceAfterSection = 6.0
   strCompanyName = ""
   strContactEmail = ""
+  strCurrency = ""
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
@@ -1895,11 +1897,12 @@ def main():
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(Paragraph(strBaseURL, objCenteredH2))
       lstStory.append(PageBreak())
-      lstStory.append(Paragraph("Introduction", objStyles["Heading1"]))
-      lstStory.append(Spacer(1, fUnit*fSpaceAfterHeader))
-      lstStory.append(Paragraph(strPreamble, objStyles["BodyText"]))
-      lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
-      lstStory.append(PageBreak())
+      if strPreamble:
+        lstStory.append(Paragraph("Introduction", objStyles["Heading1"]))
+        lstStory.append(Spacer(1, fUnit*fSpaceAfterHeader))
+        lstStory.append(Paragraph(strPreamble, objStyles["Normal"]))
+        lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
+        lstStory.append(PageBreak())
 
 
   if strAction == "AUDIT":
@@ -1966,6 +1969,11 @@ def main():
         LogEntry("Product {} with SKU {} and name {} has no description, skipping.".format(dictProduct["id"],
                                                                 dictProduct["sku"], dictProduct["name"]),0)
         continue
+      lstCategoryIDs = dictProduct.get("categories", [])
+      lstCategoryNames = []
+      for dictCategory in lstCategoryIDs:
+        strCatName = dictCategory.get("name", "")
+        lstCategoryNames.append(strCatName)
       dictAttributes = ExtractTwoColumnTables(dictProduct["description"])
       lstProdAttribs = dictProduct["attributes"] if "attributes" in dictProduct and dictProduct["attributes"] is not None else []
       iLocalCount = countLocalAttributes(lstProdAttribs)
@@ -2112,7 +2120,7 @@ def main():
             strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
         if "csv" in lstExportTypes and objCSVFileOut is not None:
           objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["description"].replace("\"","\"\"").strip()))
+            dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
           if strBrand.strip() !="No Brand":
@@ -2135,6 +2143,7 @@ def main():
             lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
           lstKeep.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
+          lstKeep.append(Paragraph("<b>Categories:</b> {}".format(", ".join(lstCategoryNames)), objStyles["Normal"]))
           lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstStory.append(KeepTogether(lstKeep))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
