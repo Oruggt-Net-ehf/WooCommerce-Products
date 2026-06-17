@@ -1107,12 +1107,10 @@ def ParseHtmlToFlowables(objParent):
         lstRows.append(lstCells)
 
       if isinstance(lstRows, list):
-        if len(lstRows) > 2:
-          iNumCols = len(lstRows[2])
-        elif len(lstRows) > 1:
-          iNumCols = len(lstRows[1])
-        else:
-          iNumCols = len(lstRows[0])
+        iNumCols = 1
+        for objRow in lstRows:
+          if len(objRow) > iNumCols:
+            iNumCols = len(objRow)
         fColWidth = fPageWidth / iNumCols
         LogEntry("debug: iNumCols={} fColWidth={} fAvailWidth={}".format(iNumCols, fColWidth, fPageWidth),4)
         lstColWidths = []
