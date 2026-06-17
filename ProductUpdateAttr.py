@@ -1106,15 +1106,18 @@ def ParseHtmlToFlowables(objParent):
           lstCells.append(Paragraph(objCell.get_text(strip=True), objStyles["Normal"]))
         lstRows.append(lstCells)
 
-      if lstRows:
-        iNumCols = len(lstRows[0])
-        fAvailWidth = tPageSize[0] - (40 * fUnit)  # minus left+right margins
-        fColWidth = fAvailWidth / iNumCols
-
+      if isinstance(lstRows, list):
+        if len(lstRows) > 2:
+          iNumCols = len(lstRows[2])
+        elif len(lstRows) > 1:
+          iNumCols = len(lstRows[1])
+        else:
+          iNumCols = len(lstRows[0])
+        fColWidth = fPageWidth / iNumCols
+        LogEntry("debug: iNumCols={} fColWidth={} fAvailWidth={}".format(iNumCols, fColWidth, fPageWidth),4)
         lstColWidths = []
         for i in range(iNumCols):
           lstColWidths.append(fColWidth)
-
         objTable = Table(lstRows, colWidths=lstColWidths)
         objTable.setStyle(TableStyle([
           ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
