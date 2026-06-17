@@ -1074,6 +1074,8 @@ def ParseHtmlToFlowables(strHtml):
       lstFlowables.append(Spacer(1, fSpaceAfterHeader * fUnit))
 
     elif strTag == "p":
+      for objChild in objTag.find_all(True):
+        objChild.attrs = {}
       lstFlowables.append(Paragraph(objTag.decode_contents(), objStyles["Normal"]))
       lstFlowables.append(Spacer(1, fSpaceAfterParagraph * fUnit))
 
@@ -1442,7 +1444,7 @@ def main():
         strPreamble = f.read()
     except Exception as e:
       LogEntry("Error reading PreambleFile '{}': {}, using default preamble.".format(strPreambleFile, e),0,True)
-
+  strPreamble = strPreamble.replace("\n", "<br/>")
 
   if "Generic" in objConfig:
     if "AuthMethod" in objConfig["Generic"]:
@@ -1895,7 +1897,7 @@ def main():
         lstStory.append(Paragraph(strAddress, objCenteredH3))
         lstStory.append(Paragraph(strContactEmail, objCenteredH3))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
-      lstStory.append(Paragraph(strBaseURL, objCenteredH2))
+      lstStory.append(Paragraph(strBaseURL+"/shop/", objCenteredH2))
       lstStory.append(PageBreak())
       if strPreamble:
         lstStory.append(Paragraph("Introduction", objStyles["Heading1"]))
@@ -1937,6 +1939,11 @@ def main():
     for lstFilter in lstFilters:
       if ":" in lstFilter:
         strFilterKey, strFilterValue = lstFilter.split(":", 1)
+        if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
+          if strFilterKey == "category":
+            strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
+          elif strFilterKey == "tag":
+            strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
         LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
         dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
