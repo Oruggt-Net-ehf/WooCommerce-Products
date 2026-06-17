@@ -1058,15 +1058,20 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-def ParseHtmlToFlowables(strHtml):
+def ParseHtmlToFlowables(objParent):
   lstFlowables = []
-  objSoup = BeautifulSoup(strHtml, features="html.parser")
+  if isinstance(objParent, str):
+    objSoup = BeautifulSoup(objParent, features="html.parser")
 
   for objTag in objSoup.children:
     if not isinstance(objTag, Tag):
       continue
 
     strTag = objTag.name.lower()
+
+    if strTag == "div":
+      lstFlowables.extend(ParseHtmlToFlowables(objTag))
+      continue
 
     if strTag in ("h1", "h2", "h3", "h4", "h5", "h6"):
       strStyleName = "Heading{}".format(strTag[1])

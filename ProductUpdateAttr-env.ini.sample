@@ -25,6 +25,7 @@ AttrEqFile = AttrEq.csv
 #Filter = sku:RB941-2nD
 #Filter = status:draft|type:simple|min_price:18000
 #Filter = sku:E62iUGS-2axD5axT
+#Filter = category:! Featured Products !
 
 [Report Export]
 ReportFileName = ProductCatalog
