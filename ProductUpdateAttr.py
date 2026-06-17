@@ -2135,6 +2135,8 @@ def main():
             strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
         elif strCurrencyPos == "right_space":
             strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
+        if fCatalogPrice == 0:
+            strFormattedPrice = "Contact us for price"
         if "csv" in lstExportTypes and objCSVFileOut is not None:
           objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
             dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
