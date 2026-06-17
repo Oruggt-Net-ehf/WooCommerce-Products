@@ -16,6 +16,7 @@ pip install reportlab
 '''
 # Import libraries
 import os
+import io
 import re
 import time
 import sys
@@ -1117,6 +1118,12 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
 
   return None
 
+def FetchImageBuffer(strUrl):
+  objResponse = requests.get(strUrl, timeout=10)
+  if objResponse.status_code != 200:
+    return None
+  return io.BytesIO(objResponse.content)
+
 def main():
   global str1PassToken
   global bQuiet
@@ -1332,6 +1339,8 @@ def main():
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
+  strExportFile = objConfig.get("Report Export", "ReportFileName", fallback="ProductCatalog").strip()
+  strContactEmail = objConfig.get("Report Export", "ContactEmail", fallback="").strip()
   strPriceAdjust = objConfig.get("Report Export", "ExportPriceAdjust", fallback="0")
   if isNum(strPriceAdjust):
     fPriceAdjust = float(strPriceAdjust)
@@ -1819,7 +1828,7 @@ def main():
   if strAction == "EXPORT":
     # Here is the export function initialized
     if "csv" in lstExportTypes:
-      strCSVOutFileName = strOutDir + "ProdCatalog.csv"
+      strCSVOutFileName = strOutDir + "{}.csv".format(strExportFile)
       LogEntry("Starting export of product descriptions in CSV format. Output file is {}".format(strCSVOutFileName),0)
       objCSVFileOut = GetFileHandle(strCSVOutFileName, "w")
       if objCSVFileOut is None or isinstance(objCSVFileOut, str):
@@ -1827,7 +1836,7 @@ def main():
         LogEntry("Unable to open output file {}, error: {}".format(strCSVOutFileName, objCSVFileOut),0,True)
       objCSVFileOut.write("Brand,SKU,Name,Price,Description\n")
     if "pdf" in lstExportTypes:
-      strPDFOutFileName = strOutDir + "ProdCatalog.pdf"
+      strPDFOutFileName = strOutDir + "{}.pdf".format(strExportFile)
       LogEntry("Starting export of product descriptions in PDF format. Output file is {}".format(strPDFOutFileName),0)
       objPDFDoc = SimpleDocTemplate(strPDFOutFileName, pagesize=tPageSize,
                                     rightMargin=fUnit*float(lstPDFMargins[0]),
@@ -1851,6 +1860,7 @@ def main():
       if strAddress != "":
         lstStory.append(Paragraph(strCompanyName, objCenteredH3))
         lstStory.append(Paragraph(strAddress, objCenteredH3))
+        lstStory.append(Paragraph(strContactEmail, objCenteredH3))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(Paragraph(strBaseURL, objCenteredH2))
       lstStory.append(PageBreak())
@@ -1961,6 +1971,10 @@ def main():
       if isinstance(lstBrands, list):
          if len(lstBrands) > 0:
             strBrand = lstBrands[0]["name"]
+      lstImages = dictProduct.get("images", [])
+      if lstImages:
+          strMainImageUrl = lstImages[0].get("src")
+
       if strAction == "MIKROTIK":
         # Build the report list for MikroTik stock report, sku and stock quantity only for products with brand MikroTik and stock quantity above 0
         if strBrand == "MikroTik" and dictProduct["stock_quantity"] > 0:
@@ -2072,6 +2086,17 @@ def main():
           lstKeep = []
           lstKeep.append(Paragraph(strName, objStyles["Heading1"]))
           lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
+          objBuffer = FetchImageBuffer(strMainImageUrl)
+          if objBuffer:
+            objPILImg = PILImage.open(objBuffer)
+            iWidth, iHeight = objPILImg.size
+            fAspect = iHeight / iWidth
+            fImgWidth = fLogoSize * fUnit
+            fImgHeight = fImgWidth * fAspect
+            objBuffer.seek(0)  # Reset buffer position after PILImage reads it
+            objImage = Image(objBuffer, width=fImgWidth * fUnit, height=fImgHeight * fUnit)
+            lstKeep.append(objImage)
+            lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
           lstKeep.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
           lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
