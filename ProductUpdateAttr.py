@@ -1166,6 +1166,7 @@ def main():
   global objCenteredH2
   global strCompanyName
   global strContactEmail
+  global fPageWidth
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1431,6 +1432,14 @@ def main():
     LogEntry("LogoSize value in config ({}) is not a number, defaulting to 50".format(strLogoSize),0)
     fLogoSize = 50.0
   fPageWidth = tPageSize[0] - ((lstPDFMargins[0] + lstPDFMargins[1]) * fUnit)
+
+  strPreambleFile = objConfig.get("Report Export", "PreambleFilePath", fallback="")
+  if strPreambleFile != "" and os.path.isfile(strPreambleFile):
+    try:
+      with open(strPreambleFile, "r", encoding="utf-8") as f:
+        strPreamble = f.read()
+    except Exception as e:
+      LogEntry("Error reading PreambleFile '{}': {}, using default preamble.".format(strPreambleFile, e),0,True)
 
 
   if "Generic" in objConfig:

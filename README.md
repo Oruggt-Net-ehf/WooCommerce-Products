@@ -131,9 +131,13 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000)*\
 
 `[Report Export]`\
+`ReportFileName = ProductCatalog` *(What should the export file be called, this will go in the outdir already defined and get appropriate extension)*\
+`ContactEmail = sales@oruggtnet.is` *(Contact info for the cover page)*\
+`PreambleFilePath = Preamble.txt` *(This text will be read in made into page 2 introduction text)*\
 `ExportPriceAdjust = 0.8` *(Adjust the price based on purpose. This example gives 20% discount across the board, for example for wholesale. 1.5 puts 50% surcharge to encourage using the webstore instead of the catalog)*\
 `ExportTypes = csv,pdf` *(Do you want both csv and pdf export, or just one or the other.)*\
 `Units = mm` *(valid options are mm, cm, and inch)*\
+`ProdImgSize = 35` *(The height of each product image in the units specified, maintaining aspect ratio)*\
 `PDFPageSize = A4` *(valid options are A4 or letter)*\
 `PDFMargins = 20,20,25,25` *(right, left, top, bottom, using the units you specified above)*\
 `AfterHeader = 2` *(using units specified, how much space after a header. In this example 2 mm)*\
