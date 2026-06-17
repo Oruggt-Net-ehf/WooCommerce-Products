@@ -1120,8 +1120,8 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
 
 def DrawFooter(objCanvas, objDoc):
   objCanvas.saveState()
-  objCanvas.setFont("Helvetica", 8)
-  strFooter = "My Company - Confidential"
+  objCanvas.setFont("Helvetica", 10)
+  strFooter = "{}  {}".format(strCompanyName, strContactEmail)
   objCanvas.drawCentredString(tPageSize[0] / 2, 15 * fUnit, strFooter)
   objCanvas.drawCentredString(tPageSize[0] / 2, 10 * fUnit, "Page {}".format(objDoc.page))
   objCanvas.restoreState()
@@ -1164,6 +1164,8 @@ def main():
   global objCenteredNormal
   global objCenteredH1
   global objCenteredH2
+  global strCompanyName
+  global strContactEmail
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1180,6 +1182,9 @@ def main():
   fSpaceAfterHeader = 2.0
   fSpaceAfterParagraph = 3.0
   fSpaceAfterSection = 6.0
+  strCompanyName = ""
+  strContactEmail = ""
+  strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
   strOutDir = None
@@ -1880,6 +1885,11 @@ def main():
         lstStory.append(Paragraph(strContactEmail, objCenteredH3))
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(Paragraph(strBaseURL, objCenteredH2))
+      lstStory.append(PageBreak())
+      lstStory.append(Paragraph("Introduction", objStyles["Heading1"]))
+      lstStory.append(Spacer(1, fUnit*fSpaceAfterHeader))
+      lstStory.append(Paragraph(strPreamble, objStyles["BodyText"]))
+      lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
       lstStory.append(PageBreak())
 
 
