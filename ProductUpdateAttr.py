@@ -1080,7 +1080,10 @@ def ParseHtmlToFlowables(objParent):
 
     elif strTag == "p":
       for objChild in objTag.find_all(True):
-        objChild.attrs = {}
+        if objChild.name == "img":
+          objChild.decompose()
+        else:
+          objChild.attrs = {}
       lstFlowables.append(Paragraph(objTag.decode_contents(), objStyles["Normal"]))
       lstFlowables.append(Spacer(1, fSpaceAfterParagraph * fUnit))
 
