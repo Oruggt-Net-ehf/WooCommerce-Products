@@ -2002,16 +2002,22 @@ def main():
                   len(lstProdAttribs), len(dictAttributes)),0)
       if strPricesIncludeTax == "no":
         fTaxRate = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""))
+        strRegPrice = dictProduct.get("regular_price", "0")
+        if isNum(strRegPrice):
+          fRegPrice = float(strRegPrice)
+        else:
+          LogEntry("Regular price for product {} with SKU {} is not a number: {}".format(dictProduct["id"], dictProduct["sku"], strRegPrice),0)
+          fRegPrice = 0.0
         if fTaxRate:
           fTaxMultiplier = 1 + (fTaxRate/100)
-          fPriceIncTax = float(dictProduct.get("regular_price",0)) * fTaxMultiplier
+          fPriceIncTax = fRegPrice * fTaxMultiplier
         else:
           LogEntry("Couldn't find tax rate for product {}, the response for tax class {} for country {} was ({}) "
                    "so can't calculate price including tax. Setting tax multiplier to 0".format(dictProduct["name"],
                                                   dictProduct.get("tax_class", ""), strBaseCountry, fTaxRate),0)
-          fPriceIncTax = float(dictProduct.get("regular_price",0))
+          fPriceIncTax = fRegPrice
       else:
-          fPriceIncTax = float(dictProduct.get("regular_price",0))
+          fPriceIncTax = fRegPrice
 
       if strCurrencyPos == "left":
           strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fPriceIncTax, strPriceNumDecimals)
