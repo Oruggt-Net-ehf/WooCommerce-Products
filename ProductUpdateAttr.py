@@ -2157,7 +2157,7 @@ def main():
         if fCatalogPrice == 0:
             strFormattedPrice = "Contact us for price"
         if "csv" in lstExportTypes and objCSVFileOut is not None:
-          objCSVFileOut.write("{},{},{},{},\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
+          objCSVFileOut.write("\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
             dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
