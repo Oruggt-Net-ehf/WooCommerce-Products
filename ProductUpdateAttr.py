@@ -1940,6 +1940,7 @@ def main():
       if ":" in lstFilter:
         strFilterKey, strFilterValue = lstFilter.split(":", 1)
         if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
+          LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
             strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
           elif strFilterKey == "tag":
@@ -2001,11 +2002,14 @@ def main():
                   len(lstProdAttribs), len(dictAttributes)),0)
       if strPricesIncludeTax == "no":
         fTaxRate = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""))
-        if fTaxRate is not None:
+        if fTaxRate:
           fTaxMultiplier = 1 + (fTaxRate/100)
           fPriceIncTax = float(dictProduct.get("regular_price",0)) * fTaxMultiplier
         else:
-          LogEntry("Couldn't find tax rate for product {}, can't calculate price including tax.".format(dictProduct["name"]),0)
+          LogEntry("Couldn't find tax rate for product {}, the response for tax class {} for country {} was ({}) "
+                   "so can't calculate price including tax. Setting tax multiplier to 0".format(dictProduct["name"],
+                                                  dictProduct.get("tax_class", ""), strBaseCountry, fTaxRate),0)
+          fPriceIncTax = float(dictProduct.get("regular_price",0))
       else:
           fPriceIncTax = float(dictProduct.get("regular_price",0))
 
