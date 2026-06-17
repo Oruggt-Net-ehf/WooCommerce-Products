@@ -28,6 +28,26 @@ AttrEqFile = AttrEq.csv
 #Filter = status:draft|type:simple|min_price:18000
 #Filter = sku:E62iUGS-2axD5axT
 
+[Report Export]
+ReportFileName = ProductCatalog
+ContactEmail = sales@oruggtnet.is
+PreambleFilePath = Preamble.txt
+ProdImgSize = 35
+ExportPriceAdjust = 1.8
+ExportTypes = csv,pdf
+Units = mm
+PDFPageSize = A4
+PDFMargins = 20,20,25,25
+AfterHeader = 2
+AfterParagraph = 4
+AfterSection = 6
+CompanyName = Öruggt Net ehf
+Address = Kristínargata 1
+ 102 Reykjavik
+ Iceland
+CompanyLogo = E:\Logo\Öruggt Net.jpg
+LogoSize = 80
+
 [WPCreds]
 VaultID = 1Password VaultID
 ItemID = 1Password ItemID

@@ -147,7 +147,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `Address = Kristínargata 1
   102 Reykjavik
   Iceland` *(Address, can be put on multiple lines if subsequent lines are indented)*\
-`CompanyLogo = E:\OneDrive - Öruggt Net ehf\Documents - Sölu og Markaðsteymi\content\Logo\Öruggt Net.jpg` *(Full path to the logo for the front of the report)*\
+`CompanyLogo = E:\Logo\Öruggt Net.jpg` *(Full path to the logo for the front of the report)*\
 `LogoSize = 50` *(Size of the logo on the report in units specified above)*\
 
 `[WPCreds]`\
