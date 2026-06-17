@@ -1837,7 +1837,7 @@ def main():
       lstStory = []
       lstStory.append(Paragraph(strCompanyName, objStyles["Title"]))
       lstStory.append(Paragraph("Product Catalog", objCenteredH1))
-      lstStory.append(Paragraph("Generate on {}".format(dtNow), objCenteredH2))
+      lstStory.append(Paragraph("Generated {}".format(time.strftime("%A %d %B %Y")), objCenteredH2))
       lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
 
       if strLogoFilePath != "":
@@ -2077,8 +2077,25 @@ def main():
           lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstStory.append(KeepTogether(lstKeep))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
+          lstKeep = []
           for objFlowable in lstDescFlowables:
-            lstStory.append(objFlowable)
+            bIsHeading = isinstance(objFlowable, Paragraph) and objFlowable.style.name.startswith("Heading")
+            if bIsHeading:
+              if lstKeep:
+                lstStory.append(KeepTogether(lstKeep))
+                lstKeep = []
+              lstKeep = [objFlowable]
+            elif len(lstKeep) > 0 and len(lstKeep) < 3:
+              lstKeep.append(objFlowable)
+            elif len(lstKeep) == 3:
+              lstStory.append(KeepTogether(lstKeep))
+              lstKeep = []
+              lstStory.append(objFlowable)
+            else:
+              lstStory.append(objFlowable)
+          if lstKeep:
+            lstStory.append(KeepTogether(lstKeep))
+
           lstStory.append(Spacer(1, fSpaceAfterSection * fUnit))
           lstStory.append(HRFlowable(width="100%", thickness=0.5, color=colors.grey))
           lstStory.append(Spacer(1, fSpaceAfterSection * fUnit))
