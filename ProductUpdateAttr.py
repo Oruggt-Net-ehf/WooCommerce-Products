@@ -1076,7 +1076,8 @@ def ParseHtmlToFlowables(objParent):
       lstFlowables.extend(ParseHtmlToFlowables(objTag))
       continue
 
-    if "Download Brochure" in objTag.get_text():
+    #if "Download Brochure" in objTag.get_text() or objTag.get_text() == "Note" or o:
+    if objTag.get_text() in ("Download Brochure", "Note", "Download Technical Data Sheet"):
       continue
 
     if strTag in ("h1", "h2", "h3", "h4", "h5", "h6"):
