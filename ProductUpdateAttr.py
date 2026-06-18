@@ -1077,7 +1077,7 @@ def ParseHtmlToFlowables(objParent):
       continue
 
     #if "Download Brochure" in objTag.get_text() or objTag.get_text() == "Note" or o:
-    if objTag.get_text() in ("Download Brochure", "Note", "Download Technical Data Sheet"):
+    if objTag.get_text() in ("Download Brochure", "Note", "Download Technical Data Sheet", "Download technical datasheet (PDF)"):
       continue
 
     if strTag in ("h1", "h2", "h3", "h4", "h5", "h6"):
@@ -1181,6 +1181,30 @@ def FetchImageBuffer(strUrl):
   if objResponse.status_code != 200:
     return None
   return io.BytesIO(objResponse.content)
+
+def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
+  lstVariations = []
+  iPage = 1
+  iProdCount = 5
+  strEndPoint = "/wp-json/wc/v3/products/{}/variations".format(iProductId)
+  dictHeader = {}
+  strMethod = "get"
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  while iProdCount > 0:
+    LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
+    dictParams["page"] = iPage
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strBaseURL + strEndPoint + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. "
+             "{} total products in response, {} total pages".format(iTotal, iTotalPages),1)
+    dictProductVars = dictResponse[1]
+    lstVariations.extend(dictProductVars)
+    iPage += 1
+  return lstVariations
 
 def main():
   global str1PassToken
@@ -2240,11 +2264,28 @@ def main():
             lstKeep.append(objImage)
             lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
           lstKeep.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
-          lstKeep.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Type:</b> {}".format(strType), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Categories:</b> {}".format(", ".join(lstCategoryNames)), objStyles["Normal"]))
           lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstStory.append(KeepTogether(lstKeep))
+          if strType != "variable":
+            lstStory.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
+          else:
+            lstVariations = GetProductVariations(dictProduct["id"],strBaseURL,strWCKey,strWCSecret)
+            for dictVariation in lstVariations:
+              strVarPrice = dictVariation.get("regular_price", "0")
+              if isNum(strVarPrice):
+                fPrice = float(strVarPrice)
+              else:
+                fPrice = 0
+              fPrice = fPrice * fPriceAdjust
+              fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictVariation.get("tax_class",""),fPrice)
+              if fPriceIncTax == 0:
+                strFormattedPrice = "Contact us for price"
+              strAttrib = dictVariation["atrributes"][0]["option"]
+              lstStory.append(Paragraph("<b>Option:{} SKU:{}</b> Price:{}".format(strAttrib,dictVariation["sku"],strFormattedPrice), objStyles["Normal"]))
+
+
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           lstKeep = []
           for objFlowable in lstDescFlowables:
