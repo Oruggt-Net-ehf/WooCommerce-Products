@@ -503,43 +503,45 @@ def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, s
 def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
   LogEntry("Loading tax details",1)
   dictHeader = {}
+  dictReturn = {}
   strMethod = "get"
   strEndPoint = "/wp-json/wc/v3/taxes"
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
-    return{}
-  lstTaxes = dictResponse[1]
+    return dictReturn
+  dictReturn["Taxes"] = dictResponse[1]
   strEndPoint = "/wp-json/wc/v3/settings/general"
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
-    return{}
+    return dictReturn
   lstSettings = dictResponse[1]
   for dictSetting in lstSettings:
     if dictSetting.get("id") == "woocommerce_default_country":
-      strBaseCountry = dictSetting.get("value").split(":")[0]
+      dictReturn["BaseCountry"] = dictSetting.get("value").split(":")[0]
     elif dictSetting.get("id") == "woocommerce_currency":
-      strCurrency = dictSetting.get("value")
+      dictReturn["Currency"] = dictSetting.get("value")
     elif dictSetting.get("id") == "woocommerce_currency_pos":
-      strCurrencyPos = dictSetting.get("value")
+      dictReturn["CurrencyPos"] = dictSetting.get("value")
     elif dictSetting.get("id") == "woocommerce_price_num_decimals":
-      strPriceNumDecimals = int(dictSetting.get("value"))
+      dictReturn["PriceNumDecimals"] = int(dictSetting.get("value"))
 
   strEndPoint = "/wp-json/wc/v3/settings/tax"
   strURL = strBaseURL + strEndPoint
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
-    return{}
+    return dictReturn
   lstSettings = dictResponse[1]
   for dictSetting in lstSettings:
     if dictSetting.get("id") == "woocommerce_prices_include_tax":
-      strPricesIncludeTax = dictSetting.get("value")
+      dictReturn["PricesIncludeTax"] = dictSetting.get("value")
       break
-  return lstTaxes, strBaseCountry, strPricesIncludeTax, strCurrency, strCurrencyPos, strPriceNumDecimals
+
+  return dictReturn
 
 def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->dict:
   LogEntry("Loading values from {}".format(strEndPoint),1)
@@ -1127,15 +1129,39 @@ def ParseHtmlToFlowables(objParent):
 
   return lstFlowables
 
-def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass):
+def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
   if strTaxClass == "":
     strTaxClass = "standard"
 
-  for dctTax in lstTaxes:
-    if dctTax.get("country") == strBaseCountry and dctTax.get("class") == strTaxClass:
-      return float(dctTax.get("rate"))
+  for dictTax in lstTaxes:
+    if dictTax.get("country") == strBaseCountry and dictTax.get("class") == strTaxClass:
+      fTaxRate = float(dictTax.get("rate"))
 
-  return None
+  if strPricesIncludeTax == "no":
+    if isNum(strRegPrice):
+      fRegPrice = float(strRegPrice)
+    else:
+      LogEntry("{} is not a valid price so calculating tax doesn't work, setting price to zero".format(strRegPrice))
+      fRegPrice = 0.0
+    if fTaxRate:
+      fTaxMultiplier = 1 + (fTaxRate/100)
+      fPriceIncTax = fRegPrice * fTaxMultiplier
+    else:
+      LogEntry("Couldn't find tax rate for tax class {}, assuming zero tax".format(strTaxClass))
+      fPriceIncTax = fRegPrice
+  else:
+    fPriceIncTax = fRegPrice
+
+  if strCurrencyPos == "left":
+    strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fPriceIncTax, strPriceNumDecimals)
+  elif strCurrencyPos == "right":
+    strFormattedPrice = "{:,.{}f}{}".format(fPriceIncTax, strPriceNumDecimals, strCurrencySymbol)
+  elif strCurrencyPos == "left_space":
+    strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fPriceIncTax, strPriceNumDecimals)
+  elif strCurrencyPos == "right_space":
+    strFormattedPrice = "{:,.{}f} {}".format(fPriceIncTax, strPriceNumDecimals, strCurrencySymbol)
+
+  return fPriceIncTax, strFormattedPrice
 
 def DrawFooter(objCanvas, objDoc):
   objCanvas.saveState()
@@ -1187,6 +1213,10 @@ def main():
   global strContactEmail
   global fPageWidth
   global strCurrency
+  global strPricesIncludeTax
+  global strCurrencyPos
+  global strCurrencySymbol
+  global strPriceNumDecimals
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1206,6 +1236,10 @@ def main():
   strCompanyName = ""
   strContactEmail = ""
   strCurrency = ""
+  strPricesIncludeTax = "no"
+  strCurrencyPos = "left"
+  strCurrencySymbol = "ISK"
+  strPriceNumDecimals = "0"
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
@@ -1834,7 +1868,35 @@ def main():
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
-  lstTaxes, strBaseCountry, strPricesIncludeTax, strCurrency, strCurrencyPos, strPriceNumDecimals = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
+  dictTaxDetails = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
+  if "Taxes" in dictTaxDetails:
+    lstTaxes = dictTaxDetails["Taxes"]
+  else:
+    LogEntry("List of VAT rates not found")
+    lstTaxes = []
+  if "BaseCountry" in dictTaxDetails:
+    strBaseCountry = dictTaxDetails["BaseCountry"]
+  else:
+    strBaseCountry = "IS"
+    LogEntry("No basecountry found, defaulting to Iceland")
+  if "PriceIncludeTax" in dictTaxDetails:
+    strPricesIncludeTax = dictTaxDetails["PriceIncludeTax"]
+  else:
+    LogEntry("No details on if price has tax included or not, defaulting to not")
+    strPricesIncludeTax = "no"
+  if "Currency" in dictTaxDetails:
+    strCurrency = dictTaxDetails["Currency"]
+  else:
+    LogEntry("Could not find what the currency is, defaulting to ISK")
+    strCurrency = "ISK"
+  if "CurrencyPos" in dictTaxDetails:
+    strCurrencyPos = dictTaxDetails["CurrencyPos"]
+  if "PriceNumDecimals" in dictTaxDetails:
+    strPriceNumDecimals = dictTaxDetails["PriceNumDecimals"]
+  else:
+    LogEntry("No details on how many decimals to use on prices, defaulting to zero")
+    strPriceNumDecimals = "0"
+
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
@@ -1925,7 +1987,6 @@ def main():
         lstStory.append(Spacer(1, fUnit*fSpaceAfterParagraph))
         lstStory.append(PageBreak())
 
-
   if strAction == "AUDIT":
     # Here is the Audit function initialized
     if bTimeStampAudit:
@@ -1988,7 +2049,7 @@ def main():
     LogEntry("Received {} products in page {}. Total products fetched: {}".format(iProdCount, iPage, iTotalProducts),1)
     iPage += 1
     for dictProduct in dictProducts:
-      strType = dictProduct.get("type","")
+      strType = dictProduct.get("type","unknown")
       if strType == "pw-gift-card":
         LogEntry("Product {} name {} is a gift card, skipping.".format(dictProduct["id"], dictProduct["name"]),0)
         continue
@@ -2019,33 +2080,8 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
-      if strPricesIncludeTax == "no":
-        fTaxRate = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""))
-        strRegPrice = dictProduct.get("regular_price", "0")
-        if isNum(strRegPrice):
-          fRegPrice = float(strRegPrice)
-        else:
-          LogEntry("Regular price for product {} with SKU {} is not a number: {}".format(dictProduct["id"], dictProduct["sku"], strRegPrice),0)
-          fRegPrice = 0.0
-        if fTaxRate:
-          fTaxMultiplier = 1 + (fTaxRate/100)
-          fPriceIncTax = fRegPrice * fTaxMultiplier
-        else:
-          LogEntry("Couldn't find tax rate for product {}, the response for tax class {} for country {} was ({}) "
-                   "so can't calculate price including tax. Setting tax multiplier to 0".format(dictProduct["name"],
-                                                  dictProduct.get("tax_class", ""), strBaseCountry, fTaxRate),0)
-          fPriceIncTax = fRegPrice
-      else:
-          fPriceIncTax = fRegPrice
+      fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""),dictProduct.get("regular_price", "0"))
 
-      if strCurrencyPos == "left":
-          strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fPriceIncTax, strPriceNumDecimals)
-      elif strCurrencyPos == "right":
-          strFormattedPrice = "{:,.{}f}{}".format(fPriceIncTax, strPriceNumDecimals, strCurrencySymbol)
-      elif strCurrencyPos == "left_space":
-          strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fPriceIncTax, strPriceNumDecimals)
-      elif strCurrencyPos == "right_space":
-          strFormattedPrice = "{:,.{}f} {}".format(fPriceIncTax, strPriceNumDecimals, strCurrencySymbol)
       strBrand = "No Brand"
       lstBrands = dictProduct["brands"]
       if isinstance(lstBrands, list):
@@ -2053,7 +2089,9 @@ def main():
             strBrand = lstBrands[0]["name"]
       lstImages = dictProduct.get("images", [])
       if lstImages:
-          strMainImageUrl = lstImages[0].get("src")
+        strMainImageUrl = lstImages[0].get("src")
+      else:
+        strMainImageUrl = ""
 
       if strAction == "MIKROTIK":
         # Build the report list for MikroTik stock report, sku and stock quantity only for products with brand MikroTik and stock quantity above 0
@@ -2147,18 +2185,18 @@ def main():
         fCatalogPrice = fPriceIncTax * fPriceAdjust
 
         if strCurrencyPos == "left":
-            strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
+          strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
         elif strCurrencyPos == "right":
-            strFormattedPrice = "{:,.{}f}{}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
+          strFormattedPrice = "{:,.{}f}{}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
         elif strCurrencyPos == "left_space":
-            strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
+          strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
         elif strCurrencyPos == "right_space":
-            strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
+          strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
         if fCatalogPrice == 0:
-            strFormattedPrice = "Contact us for price"
+          strFormattedPrice = "Contact us for price"
         if "csv" in lstExportTypes and objCSVFileOut is not None:
-          objCSVFileOut.write("\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
-            dictProduct["name"].replace(","," ").strip(), strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
+          objCSVFileOut.write("\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
+            dictProduct["name"].replace(","," ").strip(), strType, strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
           objCSVFileOut.flush()
         if "pdf" in lstExportTypes and objPDFDoc is not None:
           if strBrand.strip() !="No Brand":
@@ -2168,7 +2206,10 @@ def main():
           lstKeep = []
           lstKeep.append(Paragraph(strName, objStyles["Heading1"]))
           lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
-          objBuffer = FetchImageBuffer(strMainImageUrl)
+          if strMainImageUrl:
+            objBuffer = FetchImageBuffer(strMainImageUrl)
+          else:
+            objBuffer = None
           if objBuffer:
             objPILImg = PILImage.open(objBuffer)
             iWidth, iHeight = objPILImg.size
@@ -2181,6 +2222,7 @@ def main():
             lstKeep.append(Spacer(1, fSpaceAfterHeader * fUnit))
           lstKeep.append(Paragraph("<b>SKU:</b> {}".format(dictProduct["sku"]), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Price:</b> {}".format(strFormattedPrice), objStyles["Normal"]))
+          lstKeep.append(Paragraph("<b>Type:</b> {}".format(strType), objStyles["Normal"]))
           lstKeep.append(Paragraph("<b>Categories:</b> {}".format(", ".join(lstCategoryNames)), objStyles["Normal"]))
           lstKeep.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstStory.append(KeepTogether(lstKeep))
