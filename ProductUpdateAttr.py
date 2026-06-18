@@ -845,6 +845,7 @@ def GetFileHandle(strFileName:str, strperm:str)->object:
     dictModes["w"] = "writing"
     dictModes["r"] = "reading"
     dictModes["a"] = "appending"
+    dictModes["ab"] = "binay appending"
     dictModes["x"] = "opening"
     dictModes["wb"] = "binary write"
 
@@ -1075,6 +1076,9 @@ def ParseHtmlToFlowables(objParent):
       lstFlowables.extend(ParseHtmlToFlowables(objTag))
       continue
 
+    if "Download Brochure" in objTag.get_text():
+      continue
+
     if strTag in ("h1", "h2", "h3", "h4", "h5", "h6"):
       strStyleName = "Heading{}".format(strTag[1])
       lstFlowables.append(Paragraph(objTag.get_text(), objStyles[strStyleName]))
@@ -1141,7 +1145,7 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
     if isNum(strRegPrice):
       fRegPrice = float(strRegPrice)
     else:
-      LogEntry("{} is not a valid price so calculating tax doesn't work, setting price to zero".format(strRegPrice))
+      LogEntry("'{}' is not a valid price so calculating tax doesn't work, setting price to zero".format(strRegPrice))
       fRegPrice = 0.0
     if fTaxRate:
       fTaxMultiplier = 1 + (fTaxRate/100)
@@ -1762,6 +1766,15 @@ def main():
   else:
     LogEntry("Output directory {} good to go.".format(strOutDir),0)
 
+  strPDFOutFileName = strOutDir + "{}.pdf".format(strExportFile)
+  if strAction == "EXPORT":
+    # Testing PDF export file
+    objTestFile = GetFileHandle(strPDFOutFileName,"ab")
+    if isinstance (objTestFile,str):
+      LogEntry("Can't write to PDF file, this will end with a crash so aborting now",0,True)
+    else:
+      objTestFile.close()
+
   if strAuthMethod == "1pa":
     strCredMethod = "1Password"
     dictItemCollection = {}
@@ -1943,6 +1956,12 @@ def main():
 
   if strAction == "EXPORT":
     # Here is the export function initialized
+    objTestFile = GetFileHandle(strPDFOutFileName,"ab")
+    if isinstance (objTestFile,str):
+      LogEntry("Can't write to PDF file, this will end with a crash so aborting now",0,True)
+    else:
+      objTestFile.close()
+
     if "csv" in lstExportTypes:
       strCSVOutFileName = strOutDir + "{}.csv".format(strExportFile)
       LogEntry("Starting export of product descriptions in CSV format. Output file is {}".format(strCSVOutFileName),0)
@@ -1950,9 +1969,8 @@ def main():
       if objCSVFileOut is None or isinstance(objCSVFileOut, str):
         objCSVFileOut = None
         LogEntry("Unable to open output file {}, error: {}".format(strCSVOutFileName, objCSVFileOut),0,True)
-      objCSVFileOut.write("Brand,SKU,Name,Price,Description\n")
+      objCSVFileOut.write("Brand,SKU,Name,Type,Price,Description\n")
     if "pdf" in lstExportTypes:
-      strPDFOutFileName = strOutDir + "{}.pdf".format(strExportFile)
       LogEntry("Starting export of product descriptions in PDF format. Output file is {}".format(strPDFOutFileName),0)
       objPDFDoc = SimpleDocTemplate(strPDFOutFileName, pagesize=tPageSize,
                                     rightMargin=fUnit*float(lstPDFMargins[0]),
@@ -2080,7 +2098,6 @@ def main():
                "It has {} existing attributes and {} attributes in the description.".format(
                   dictProduct["id"], dictProduct["sku"], dictProduct["name"],
                   len(lstProdAttribs), len(dictAttributes)),0)
-      fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""),dictProduct.get("regular_price", "0"))
 
       strBrand = "No Brand"
       lstBrands = dictProduct["brands"]
@@ -2182,6 +2199,7 @@ def main():
 
       if strAction == "EXPORT":
         # write out the description to the export file(s)
+        fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""),dictProduct.get("regular_price", "0"))
         fCatalogPrice = fPriceIncTax * fPriceAdjust
 
         if strCurrencyPos == "left":
