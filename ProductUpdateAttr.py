@@ -1211,6 +1211,8 @@ def main():
   dictProxies = {}
   strOutDir = None
   objFileOut = None
+  objCSVFileOut = None
+  objPDFDoc = None
   strAccountName = None
   strMikrotikToken = None
   strHeartBeatURL = None
