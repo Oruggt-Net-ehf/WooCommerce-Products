@@ -83,7 +83,7 @@ pip install reportlab
 
 ### CLI Explained
 
-`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [--export] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
+`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [--export] [--production] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
 
 WooCommerce Product description parser and attrib creator. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
 
@@ -97,6 +97,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
   `--mikrotik`           Action directive. Update stock level with Mikrotik.Required unless you specify another action, only one action can be specified.
   `--convert`            Action directive. Convert local attributes to global ones.Required unless you specify another action, only one action can be specified.
   `--export`             Action directive. Export all products to a CSV file and/or PDF based on config, no updates will be made. Required unless you specify another action, only one action can be specified.
+  `--production`         flag to consent that you know you are running production config. If configuration file has environment variable set to production, the script will not run without this flag. Conversely setting this flag if configuration environment is not set to production will stop the script cold.
   `-c, --config CONFIG`  Path to the configuration file. Optional. Defaults to ProductUpdateAttr.ini in the same directory as the script.\
   `-v, --verbosity`      Verbose output, vv level 2 vvvv level 4\
   `-x, --proxy PROXY`    Proxy to use for API calls. Optional\
@@ -106,6 +107,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 ### Configuration file explained
 
 `[Generic]`\
+`Environment = production` *(If the value starts with prod, case insensitive this configuration file will be considered a production configuration, and the script won't run without the production flag. Any other value will be considered non-prod, where the production flag is not allowed. This is to safeguard using production configuration file, thinking it is non-prod. Depends of course on setting this correctly. Therefor it is important to set this to prod if this configuration file points to production API keys)*\
 `AuthMethod = 1Password` or `Env` *(only first three characters are relevant, not case sensitive)*\
 `1PassAccount = my account name` *(Required when 1Password is the method, unless you are using token. Ignored on env. The name of your 1Password account as shown in Manage accounts)*\
 `1PassTokenEnvVar = 1PASSTOKEN` *(If you are using 1Password in token mode rather than account mode, this is the name of the environment variable for the token. Defaults to "1PASSTOKEN" if not provided )*\

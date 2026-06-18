@@ -1314,6 +1314,8 @@ def main():
   objParser.add_argument("--export", dest="export", action="store_true",
                          help="Action directive. Export all products to a CSV file and/or PDF based on config, "
                          "no updates will be made. Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--production",dest="production",action="store_true",help="flag to consent that you know you are running production config"
+                         "if configuration file has environment variable set to production, the script will not run without this flag")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
   objParser.add_argument("-v", "--verbosity", action="count", default=1, help="Verbose output, vv level 2 vvvv level 4")
   objParser.add_argument("-x", "--proxy", type=str, help="Proxy to use for API calls")
@@ -1355,6 +1357,7 @@ def main():
     sys.exit(9)
   strScriptHost = platform.node().upper()
   bQuiet = objArgs.silent
+  bProduction = objArgs.production
   bExport = objArgs.export
   bAudit = objArgs.audit
   bUpdate = objArgs.update
@@ -1430,6 +1433,17 @@ def main():
     objConFileHndl.close()
   except Exception as e:
     LogEntry("Error occurred while reading configuration file: {}".format(str(e)),0,True)
+
+  strEnvironment = objConfig.get("Generic","Environment",fallback="dev")
+  bProdEnv = strEnvironment.lower().startswith("prod")
+  if bProduction and not bProdEnv:
+    LogEntry("It is not allowable to set the production flag in non-prod environments",0,True)
+  elif not bProduction and bProdEnv:
+    LogEntry("Environment is production, but the production flag is missing, did you make a mistake?")
+    strResponse = input("Please type production to consent to running script with production enviorments: ")
+    if strResponse.lower() != "production":
+      LogEntry("Missing confirmation, unable to continue",0,True)
+
 
   strSentryDSN = objConfig.get("Generic", "SentryDSN", fallback="") or FetchEnv("SENTRY_DSN")
   LogEntry("Sentry DSN is set: {}".format(bool(strSentryDSN)), 0)

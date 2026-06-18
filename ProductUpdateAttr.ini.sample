@@ -1,4 +1,5 @@
 [Generic]
+Environment = dev
 AuthMethod = 1Password
 1PassAccount = Your Account name
 1PassTokenEnvVar = 1PASSTOKEN
