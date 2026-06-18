@@ -1192,7 +1192,7 @@ def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
   dictParams = {}
   dictParams["per_page"] = iPerPage
   while iProdCount > 0:
-    LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
+    LogEntry("Fetching variations, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
     strParams = urlLib.urlencode(dictParams)
     strURL = strBaseURL + strEndPoint + "?" + strParams
@@ -1200,8 +1200,12 @@ def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
     LogEntry("API call successful, processing response. "
-             "{} total products in response, {} total pages".format(iTotal, iTotalPages),1)
+             "{} total variations in response, {} total pages".format(iTotal, iTotalPages),2)
     dictProductVars = dictResponse[1]
+    iTotalVars = len(dictProductVars)
+    LogEntry("Fetched {} variations".format(iTotalVars),1)
+    if iTotalVars == 0:
+      break
     lstVariations.extend(dictProductVars)
     iPage += 1
   return lstVariations
@@ -1917,8 +1921,8 @@ def main():
   else:
     strBaseCountry = "IS"
     LogEntry("No basecountry found, defaulting to Iceland")
-  if "PriceIncludeTax" in dictTaxDetails:
-    strPricesIncludeTax = dictTaxDetails["PriceIncludeTax"]
+  if "PricesIncludeTax" in dictTaxDetails:
+    strPricesIncludeTax = dictTaxDetails["PricesIncludeTax"]
   else:
     LogEntry("No details on if price has tax included or not, defaulting to not")
     strPricesIncludeTax = "no"
@@ -2224,19 +2228,22 @@ def main():
 
       if strAction == "EXPORT":
         # write out the description to the export file(s)
-        fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""),dictProduct.get("regular_price", "0"))
-        fCatalogPrice = fPriceIncTax * fPriceAdjust
-
-        if strCurrencyPos == "left":
-          strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
-        elif strCurrencyPos == "right":
-          strFormattedPrice = "{:,.{}f}{}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
-        elif strCurrencyPos == "left_space":
-          strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
-        elif strCurrencyPos == "right_space":
-          strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
-        if fCatalogPrice == 0:
+        if strType in ("variable","Bundle"):
           strFormattedPrice = "Contact us for price"
+        else:
+          fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictProduct.get("tax_class",""),dictProduct.get("regular_price", "0"))
+          fCatalogPrice = fPriceIncTax * fPriceAdjust
+          if strCurrencyPos == "left":
+            strFormattedPrice = "{}{:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
+          elif strCurrencyPos == "right":
+            strFormattedPrice = "{:,.{}f}{}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
+          elif strCurrencyPos == "left_space":
+            strFormattedPrice = "{} {:,.{}f}".format(strCurrencySymbol, fCatalogPrice, strPriceNumDecimals)
+          elif strCurrencyPos == "right_space":
+            strFormattedPrice = "{:,.{}f} {}".format(fCatalogPrice, strPriceNumDecimals, strCurrencySymbol)
+          if fCatalogPrice == 0:
+            strFormattedPrice = "Contact us for price"
+
         if "csv" in lstExportTypes and objCSVFileOut is not None:
           objCSVFileOut.write("\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n".format(strBrand.strip(), dictProduct["sku"],
             dictProduct["name"].replace(","," ").strip(), strType, strFormattedPrice, dictProduct["short_description"].replace("\"","\"\"").strip()))
@@ -2282,10 +2289,13 @@ def main():
               fPriceIncTax, strFormattedPrice = GetProductTaxRate(lstTaxes, strBaseCountry, dictVariation.get("tax_class",""),fPrice)
               if fPriceIncTax == 0:
                 strFormattedPrice = "Contact us for price"
-              strAttrib = dictVariation["atrributes"][0]["option"]
-              lstStory.append(Paragraph("<b>Option:{} SKU:{}</b> Price:{}".format(strAttrib,dictVariation["sku"],strFormattedPrice), objStyles["Normal"]))
-
-
+              lstAttribs = []
+              for dictAttrib in dictVariation["attributes"]:
+                lstAttribs.append(dictAttrib["option"])
+              strAttrib = ",".join(lstAttribs)
+              lstStory.append(Paragraph("<b>Option:</b> {} <b>SKU:</b> {} <b>Price:</b> {}".format(
+                strAttrib,dictVariation["sku"],strFormattedPrice), objStyles["Normal"]))
+          lstStory.append(Spacer(1, fSpaceAfterParagraph * fUnit))
           lstDescFlowables = ParseHtmlToFlowables(dictProduct["description"])
           lstKeep = []
           for objFlowable in lstDescFlowables:
