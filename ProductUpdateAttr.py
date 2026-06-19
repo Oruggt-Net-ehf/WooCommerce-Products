@@ -21,6 +21,8 @@ import re
 import time
 import sys
 import json
+import random
+import string
 import requests
 import sentry_sdk
 import argparse
@@ -58,6 +60,14 @@ strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where t
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
 
+
+def CustomExcepthook(clsType, objValue, objTraceback):
+  strLocation = GetExceptionLocation(objTraceback)
+  CleanExit("unhandled exception: {} at {}. Details: {}".format(clsType, strLocation, objValue), bLog=True)
+  sys.__excepthook__(clsType, objValue, objTraceback)
+
+sys.excepthook = CustomExcepthook
+
 dictCurrencySymbols = {
     "EUR": "€",
     "ISK": "kr",
@@ -72,12 +82,6 @@ dictCurrencySymbols = {
     "RON": "lei",
 }
 
-def CustomExcepthook(clsType, objValue, objTraceback):
-  strLocation = GetExceptionLocation(objTraceback)
-  CleanExit("unhandled exception: {} at {}. Details: {}".format(clsType, strLocation, objValue), bLog=True)
-  sys.__excepthook__(clsType, objValue, objTraceback)
-
-sys.excepthook = CustomExcepthook
 
 # sub defs
 
@@ -154,8 +158,41 @@ def ExtractFilenameFromUrl(strUrl:str)->str:
   strFilename = os.path.basename(strParsedPath)
 
   if not strFilename:
-    LogEntry("Could not extract filename from URL: {}".format(strUrl))
-    return None
+    strFilename = BuildFallbackFilename(strParsedPath)
+
+  return strFilename
+
+def FindLastDir(strParsedPath:str)->str:
+  strLastDir = ""
+  lstParts = strParsedPath.split("/")
+  for strPart in reversed(lstParts):
+    if strPart:
+      strLastDir = strPart
+      break
+  return strLastDir
+
+def BuildFallbackFilename(strParsedPath:str)->str:
+  """
+  Builds a filename out of the last non-empty directory segment of a
+  URL path, plus a random suffix to avoid collisions.
+
+  Args:
+    strParsedPath: the .path component of a parsed URL
+
+  Returns:
+    strFilename: e.g. "products_x7f2k9qa"
+  """
+
+  strLastDir = FindLastDir(strParsedPath)
+
+  if not strLastDir:
+    strLastDir = "image"
+
+  strRandomSuffix = ""
+  for i in range(8):
+    strRandomSuffix += random.choice(string.ascii_lowercase + string.digits)
+
+  strFilename = "{}_{}".format(strLastDir, strRandomSuffix)
 
   return strFilename
 
@@ -843,8 +880,9 @@ def CleanExit(strCause:str,bLog:bool=True,bNormal:bool=False)->None:
   Returns:
     nothing as it terminates the script
   """
+  strLocalExitCode = strExitCode
   if bNormal:
-    strExitCode = ""
+    strLocalExitCode = ""
   if bLog:
     if bNormal:
       LogEntry("{} is exiting normally on {}: {}".format(
@@ -854,7 +892,7 @@ def CleanExit(strCause:str,bLog:bool=True,bNormal:bool=False)->None:
         strScriptName, strScriptHost, strCause), 0)
 
   if strHeartBeatURL:
-    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strExitCode,{},"HEAD",objData=strCause)
+    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strLocalExitCode,{},"HEAD",objData=strCause)
     LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
 
   if strBSKey and strIncidentURL and not bNormal:
@@ -1342,7 +1380,11 @@ def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret
     iPage += 1
   return lstVariations
 
-def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str):
+def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str)->None:
+  dictBrandID = {}
+  dictBrandID["id"] = int(dictGlobalBrands["mikrotik"])
+  lstBrandID = [dictBrandID]
+
   dictProductbySKU = {}
   iPage = 1
   iProdCount = 5
@@ -1352,7 +1394,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   dictParams = {}
   dictParams["per_page"] = iPerPage
   while iProdCount > 0:
-    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),1)
+    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
     dictParams["page"] = iPage
     strParams = urlLib.urlencode(dictParams)
     strURL = strBaseURL + strEndPoint + "?" + strParams
@@ -1363,7 +1405,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
              "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
-    LogEntry("Fetched {} Products".format(iProdCount),1)
+    LogEntry("Fetched {} Products".format(iProdCount),0)
     iPage += 1
     for dictProd in dictProducts:
       dictProductbySKU[dictProd["sku"]] = dictProd["name"]
@@ -1378,14 +1420,49 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("API call successful, processing response. "
             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
   dictMTProducts = dictResponse[1]
-  iMTProdCount = len(dictProducts)
-  LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),1)
+  iMTProdCount = len(dictMTProducts)
+  LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
+  lstResults = []
   for dictMTProd in dictMTProducts["data"]:
-    if dictMTProd["product_code"] in dictProductbySKU:
-      LogEntry("{} exists in WooCommerce".format(dictMTProd["product_name"]))
-    else:
-      LogEntry("{} doe not exists in WooCommerce".format(dictMTProd["product_name"]))
+    if dictMTProd["parameters"]:
+      for dictattrib in dictMTProd["parameters"]:
+        LogEntry("Parameter: {} Len:{}".format(dictattrib["name"],len(dictattrib["name"])))
+    if strImagePath:
+      strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
+      os.makedirs(strFullPath, exist_ok=True)
+      for strImgURL in dictMTProd["images"]["large"]:
+        SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
+      strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"small")
+      os.makedirs(strFullPath, exist_ok=True)
+      for strImgURL in dictMTProd["images"]["small"]:
+        SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
 
+    if dictMTProd["product_code"] not in dictProductbySKU:
+      dictProduct = {}
+      dictProduct["status"] = "draft"
+      dictProduct["name"] = dictMTProd["product_name"]
+      dictProduct["type"] = "simple"
+      dictProduct["sku"] = dictMTProd["product_code"]
+      dictProduct["description"] = "MikroTik {} sku:{}".format(dictMTProd["product_name"],dictMTProd["product_code"])
+      dictProduct["short_description"] = "MikroTik {} sku:{}".format(dictMTProd["product_name"],dictMTProd["product_code"])
+      dictProduct["backorders"] = "no"
+      dictProduct["reviews_allowed"] = "false"
+      dictProduct["manage_stock"] = True
+      dictProduct["brands"] = lstBrandID
+
+      # Remove None values so payload stays clean
+      dictCleaned = {}
+      for strKey, strValue in dictProduct.items():
+          if strValue is not None:
+              dictCleaned[strKey] = strValue
+      dictProduct = dictCleaned
+
+      LogEntry("{} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_name"]),0)
+
+      dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
+      lstResults.append((dictMTProd["product_code"], dictResult))
+
+  return lstResults
 
 def main():
   global str1PassToken
@@ -1427,6 +1504,7 @@ def main():
   global strCurrencyPos
   global strCurrencySymbol
   global strPriceNumDecimals
+  global strImagePath
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1450,6 +1528,7 @@ def main():
   strCurrencyPos = "left"
   strCurrencySymbol = "ISK"
   strPriceNumDecimals = "0"
+  strExitCode = "fail"
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
@@ -1462,7 +1541,7 @@ def main():
   strHeartBeatURL = None
   strBSKey = None
   strIncidentURL = None
-  strExitCode = "fail"
+
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
@@ -1618,6 +1697,7 @@ def main():
   except Exception as e:
     LogEntry("Error occurred while reading configuration file: {}".format(str(e)),0,True)
 
+  strImagePath = objConfig.get("Generic","ProductImgPath",fallback="")
   strEnvironment = objConfig.get("Generic","Environment",fallback="dev")
   bProdEnv = strEnvironment.lower().startswith("prod")
   if bProduction and not bProdEnv:
