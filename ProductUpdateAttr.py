@@ -1383,7 +1383,8 @@ def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret
 def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str)->None:
   dictBrandID = {}
   dictBrandID["id"] = int(dictGlobalBrands["mikrotik"])
-  lstBrandID = [dictBrandID]
+  dictCategory = {}
+  dictCategory["id"] = int(dictGlobalCategories["mikrotik"])
 
   dictProductbySKU = {}
   iPage = 1
@@ -1425,7 +1426,6 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
     lstProdAttribs = []
-
     if strImagePath:
       strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
       os.makedirs(strFullPath, exist_ok=True)
@@ -1462,8 +1462,9 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       dictProduct["backorders"] = "no"
       dictProduct["reviews_allowed"] = "false"
       dictProduct["manage_stock"] = True
-      dictProduct["brands"] = lstBrandID
+      dictProduct["brands"] = [dictBrandID]
       dictProduct["attributes"] = lstProdAttribs
+      dictProduct["categories"] = [dictCategory]
 
       # Remove None values so payload stays clean
       dictCleaned = {}
