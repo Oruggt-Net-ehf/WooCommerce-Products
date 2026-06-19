@@ -1424,9 +1424,8 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
-    if dictMTProd["parameters"]:
-      for dictattrib in dictMTProd["parameters"]:
-        LogEntry("Parameter: {} Len:{}".format(dictattrib["name"],len(dictattrib["name"])))
+    lstProdAttribs = []
+
     if strImagePath:
       strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
       os.makedirs(strFullPath, exist_ok=True)
@@ -1438,6 +1437,21 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
         SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
 
     if dictMTProd["product_code"] not in dictProductbySKU:
+      if dictMTProd["parameters"]:
+        for dictattrib in dictMTProd["parameters"]:
+          if dictattrib["name"] in dictAttrEq:
+            strKey = dictAttrEq[dictattrib["name"]]
+            LogEntry("Changing attribute {} to {}".format(dictattrib["name"], strKey),0)
+          else:
+            strKey = dictattrib["name"]
+
+          if strKey.lower()[:28] in dictGlobalAttributes:
+            iAttrID = dictGlobalAttributes[strKey.lower()[:28]]
+          else:
+            LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey),0)
+            iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+            dictGlobalAttributes[strKey.lower()[:28]] = iAttrID
+          lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": [dictattrib["data"]]})
       dictProduct = {}
       dictProduct["status"] = "draft"
       dictProduct["name"] = dictMTProd["product_name"]
@@ -1449,6 +1463,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       dictProduct["reviews_allowed"] = "false"
       dictProduct["manage_stock"] = True
       dictProduct["brands"] = lstBrandID
+      dictProduct["attributes"] = lstProdAttribs
 
       # Remove None values so payload stays clean
       dictCleaned = {}
@@ -1461,6 +1476,14 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
 
       dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
       lstResults.append((dictMTProd["product_code"], dictResult))
+      if dictResult:
+        if dictResult[0].get("Success"):
+          LogEntry("SKU {} Successful".format(dictMTProd["product_code"]),0)
+          strFilter += "{},".format(dictMTProd["product_code"])
+        else:
+          LogEntry("SKU {} had an issue. Code: {}, error: {}".format(dictMTProd["product_code"],dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
+      else:
+          LogEntry("Something odd is going on. SKU {} does not have a valid result tuple".format(dictMTProd["product_code"]),0)
 
   return lstResults
 
@@ -1477,6 +1500,7 @@ def main():
   global dictGlobalCategories
   global dictGlobalTags
   global dictGlobalBrands
+  global dictAttrEq
   global iPerPage
   global strMetricURL
   global strMetricToken
@@ -1532,6 +1556,7 @@ def main():
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
+  dictAttrEq = {}
   strOutDir = None
   objFileOut = None
   objCSVFileOut = None

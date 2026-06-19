@@ -16,8 +16,12 @@ Wireless 2.4 GHz/5 GHz chip model;Wifi Chip Model 2.4/5GHz
 Wireless 2.4 GHz/5 GHz generation;Wifi Gen 2.4/5GHz
 Number of Combo 10G Ethernet/ SFP+ ports;Combo 10G SFP+ Ports
 Number of 1G Ethernet ports;1G Ethernet Ports
+10/100/1000 Ethernet ports;1G Ethernet Ports
 Number of 1G Ethernet ports with PoE-out;1G PoE-out Ports
 Number of 1G Ethernet ports with Reverse PoE (PoE-in);1G PoE-in Ports
 Power Supply;Power Source
 Output Power Options;Power Output
 Type;Product Type
+Antenna gain dBi for Wireless 2;Antenna gain - Wireless 2
+Antenna gain dBi for Wireless 3;Antenna gain - Wireless 3
+Max power consumption without attachments;Max Power Consumed - base
