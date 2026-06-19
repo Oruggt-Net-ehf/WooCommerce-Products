@@ -106,7 +106,7 @@ def SaveImageFromUrl(strUrl:str, strOutputDir:str, intTimeoutSeconds:int=10)->bo
   strOutputPath = os.path.join(strOutputDir, strFilename)
 
   if os.path.exists(strOutputPath):
-    LogEntry("Skipping download, file already exists: {}".format(strOutputPath))
+    LogEntry("Skipping download, file already exists: {}".format(strOutputPath),1)
     return True
 
   objResponse = None
@@ -1387,6 +1387,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   dictCategory["id"] = int(dictGlobalCategories["mikrotik products"])
 
   dictProductbySKU = {}
+  iTotalProducts = 0
   iPage = 1
   iProdCount = 5
   strEndPoint = "/wp-json/wc/v3/products/"
@@ -1406,10 +1407,14 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
              "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
     dictProducts = dictResponse[1]
     iProdCount = len(dictProducts)
+    iTotalProducts += iProdCount
     LogEntry("Fetched {} Products".format(iProdCount),0)
     iPage += 1
     for dictProd in dictProducts:
+      LogEntry("sku: {} Name:{}".format(dictProd["sku"].lower(),dictProd["name"]),3)
       dictProductbySKU[dictProd["sku"]] = dictProd["name"]
+  LogEntry("Downloaded {} products and assigned into Product by sku. count {}".format(iTotalProducts,len(dictProductbySKU)))
+
 
   dictParams = {}
   dictParams["apiKey"]=strMTkey
@@ -1436,7 +1441,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       for strImgURL in dictMTProd["images"]["small"]:
         SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
 
-    if dictMTProd["product_code"] not in dictProductbySKU:
+    if dictMTProd["product_code"].lower() not in dictProductbySKU:
       if dictMTProd["parameters"]:
         for dictattrib in dictMTProd["parameters"]:
           if dictattrib["name"] in dictAttrEq:
@@ -1473,14 +1478,13 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
               dictCleaned[strKey] = strValue
       dictProduct = dictCleaned
 
-      LogEntry("{} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_name"]),0)
+      LogEntry("{} {} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_name"], dictMTProd["product_name"]),0)
 
       dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
       lstResults.append((dictMTProd["product_code"], dictResult))
       if dictResult:
         if dictResult[0].get("Success"):
           LogEntry("SKU {} Successful".format(dictMTProd["product_code"]),0)
-          strFilter += "{},".format(dictMTProd["product_code"])
         else:
           LogEntry("SKU {} had an issue. Code: {}, error: {}".format(dictMTProd["product_code"],dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
       else:
