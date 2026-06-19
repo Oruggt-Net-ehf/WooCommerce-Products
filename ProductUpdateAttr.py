@@ -1384,7 +1384,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   dictBrandID = {}
   dictBrandID["id"] = int(dictGlobalBrands["mikrotik"])
   dictCategory = {}
-  dictCategory["id"] = int(dictGlobalCategories["mikrotik"])
+  dictCategory["id"] = int(dictGlobalCategories["mikrotik products"])
 
   dictProductbySKU = {}
   iPage = 1
