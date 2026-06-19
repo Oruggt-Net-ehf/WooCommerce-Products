@@ -81,6 +81,131 @@ sys.excepthook = CustomExcepthook
 
 # sub defs
 
+def SaveImageFromUrl(strUrl:str, strOutputDir:str, intTimeoutSeconds:int=10)->bool:
+  """
+  Downloads an image from a URL and writes it to disk. Skips the
+  download if a file with that name already exists. Refuses to write
+  the file if the response's Content-Type isn't a recognized image
+  type. The saved file's extension always matches the actual
+  Content-Type, regardless of what extension the URL implied.
+
+  Args:
+    strUrl: full URL of the image to fetch
+    strOutputDir: destination directory; filename is taken from strUrl
+    intTimeoutSeconds: request timeout in seconds
+
+  Returns:
+    boolSuccess: True if the file is present on disk (downloaded or
+      already existing), False if the download failed
+  """
+  strFilename = ExtractFilenameFromUrl(strUrl)
+  strOutputPath = os.path.join(strOutputDir, strFilename)
+
+  if os.path.exists(strOutputPath):
+    LogEntry("Skipping download, file already exists: {}".format(strOutputPath))
+    return True
+
+  objResponse = None
+
+  try:
+    objResponse = requests.get(strUrl, stream=True, timeout=intTimeoutSeconds)
+  except requests.exceptions.RequestException as objError:
+    LogEntry("Failed to fetch image from {}: {}".format(strUrl, objError))
+    return False
+
+  if objResponse.status_code != 200:
+    LogEntry("Unexpected status code {} for {}".format(objResponse.status_code, strUrl))
+    return False
+
+  strContentType = objResponse.headers.get("Content-Type", "")
+  strExtension = GetExtensionFromContentType(strContentType)
+
+  if not strExtension:
+    LogEntry("Refusing to save, unrecognized content type for {}: {}".format(strUrl, strContentType))
+    return False
+
+  strBaseFilename, strUrlExtension = os.path.splitext(strFilename)
+  strFilename = strBaseFilename + strExtension
+  strOutputPath = os.path.join(strOutputDir, strFilename)
+
+  objFile = open(strOutputPath, mode="wb")
+
+  for bytChunk in objResponse.iter_content(chunk_size=8192):
+    objFile.write(bytChunk)
+
+  objFile.close()
+  del objResponse
+
+  return True
+
+def ExtractFilenameFromUrl(strUrl:str)->str:
+  """
+  Pulls the filename portion off the path component of a URL.  Falls
+  back to a name built from the last directory segment plus a random
+  suffix if the URL doesn't end in something usable.
+
+  Args:
+    strUrl: full URL string
+
+  Returns:
+    strFilename: the filename, e.g. "logo.png"
+  """
+  strParsedPath = urlLib.urlparse(strUrl).path
+  strFilename = os.path.basename(strParsedPath)
+
+  if not strFilename:
+    LogEntry("Could not extract filename from URL: {}".format(strUrl))
+    return None
+
+  return strFilename
+
+def HasFileExtension(strFilename:str)->bool:
+  """
+  Checks whether a filename already has an extension.
+
+  Args:
+    strFilename: filename to check
+
+  Returns:
+    boolHasExtension: True if an extension is present
+  """
+  strBase, strExt = os.path.splitext(strFilename)
+
+  if strExt:
+    return True
+  else:
+    return False
+
+def GetExtensionFromContentType(strContentType:str)->str|None:
+  """
+  Maps a Content-Type header value to a file extension, using an
+  explicit table for the image types we expect to handle.
+
+  Args:
+    strContentType: raw header value, e.g. "image/jpeg; charset=utf-8"
+
+  Returns:
+    strExtension: e.g. ".jpg", or None if the mime type isn't in the table
+  """
+  if not strContentType:
+    return None
+
+  strMimeType = strContentType.split(";")[0].strip()
+
+  dctExtensionByMimeType = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/svg+xml": ".svg",
+  }
+
+  strExtension = dctExtensionByMimeType.get(strMimeType)
+
+  return strExtension
+
 def GetExceptionLocation(objTraceback:traceback.StackSummary)->str:
   objTB = traceback.extract_tb(objTraceback)
 
@@ -128,7 +253,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
 
-def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, strWCSecret:str):
+def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, strWCSecret:str)->None:
     """
     Create a new WooCommerce product using the REST API.
     Parameters:
@@ -383,7 +508,7 @@ def AttributeExists(listAttributeCollection:list, strSearchName:str)->str|bool:
 
     return "false"
 
-def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, strWCSecret:str):
+def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->None:
     """
     Create a new global attribute in WooCommerce and return its ID.
 
@@ -706,7 +831,7 @@ async def get1PasswordItems(dictItemCollection:dict, strAccountName:str|None=Non
 
   return dictCollection
 
-def CleanExit(strCause:str,bLog=True):
+def CleanExit(strCause:str,bLog:bool=True)->None:
   """
   Handles cleaning things up before unexpected exit in case of an error.
   Things such as closing down open file handles, open database connections, etc.
@@ -741,7 +866,7 @@ def CleanExit(strCause:str,bLog=True):
 
   sys.exit(9)
 
-def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False):
+def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False)->None:
   """
   This handles writing all event logs into the appropriate log facilities
   This could be a simple text log file, a database connection, etc.
@@ -1061,7 +1186,7 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-def ParseHtmlToFlowables(objParent):
+def ParseHtmlToFlowables(objParent:any)->list:
   lstFlowables = []
   if isinstance(objParent, str):
     objParent = BeautifulSoup(objParent, features="html.parser")
@@ -1134,7 +1259,7 @@ def ParseHtmlToFlowables(objParent):
 
   return lstFlowables
 
-def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
+def GetProductTaxRate(lstTaxes:list, strBaseCountry:str, strTaxClass:str, strRegPrice:str)->tuple:
   if strTaxClass == "":
     strTaxClass = "standard"
 
@@ -1168,7 +1293,7 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
 
   return fPriceIncTax, strFormattedPrice
 
-def DrawFooter(objCanvas, objDoc):
+def DrawFooter(objCanvas:any, objDoc:any)->None:
   objCanvas.saveState()
   objCanvas.setFont("Helvetica", 10)
   strFooter = "{}  {} | All prices are in {} and include Icelandic VAT".format(strCompanyName, strContactEmail, strCurrency)
@@ -1176,13 +1301,13 @@ def DrawFooter(objCanvas, objDoc):
   objCanvas.drawCentredString(tPageSize[0] / 2, 10 * fUnit, "Page {}".format(objDoc.page))
   objCanvas.restoreState()
 
-def FetchImageBuffer(strUrl):
+def FetchImageBuffer(strUrl:str)->io.BytesIO:
   objResponse = requests.get(strUrl, timeout=10)
   if objResponse.status_code != 200:
     return None
   return io.BytesIO(objResponse.content)
 
-def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
+def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret:str)->list:
   lstVariations = []
   iPage = 1
   iProdCount = 5
@@ -1209,6 +1334,51 @@ def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
     lstVariations.extend(dictProductVars)
     iPage += 1
   return lstVariations
+
+def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str):
+  dictProductbySKU = {}
+  iPage = 1
+  iProdCount = 5
+  strEndPoint = "/wp-json/wc/v3/products/"
+  dictHeader = {}
+  strMethod = "get"
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  while iProdCount > 0:
+    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),1)
+    dictParams["page"] = iPage
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strBaseURL + strEndPoint + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. "
+             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+    dictProducts = dictResponse[1]
+    iProdCount = len(dictProducts)
+    LogEntry("Fetched {} Products".format(iProdCount),1)
+    iPage += 1
+    for dictProd in dictProducts:
+      dictProductbySKU[dictProd["sku"]] = dictProd["name"]
+
+  dictParams = {}
+  dictParams["apiKey"]=strMTkey
+  strParams = urlLib.urlencode(dictParams)
+  strURL = strMTURL + "?" + strParams
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to MikroTik Product API failed. {}".format(dictResponse[1]),0,True)
+  LogEntry("API call successful, processing response. "
+            "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+  dictMTProducts = dictResponse[1]
+  iMTProdCount = len(dictProducts)
+  LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),1)
+  for dictMTProd in dictMTProducts["data"]:
+    if dictMTProd["product_code"] in dictProductbySKU:
+      LogEntry("{} exists in WooCommerce".format(dictMTProd))
+    else:
+      LogEntry("{} doe not exists in WooCommerce".format(dictMTProd))
+
 
 def main():
   global str1PassToken
@@ -1314,6 +1484,10 @@ def main():
   objParser.add_argument("--export", dest="export", action="store_true",
                          help="Action directive. Export all products to a CSV file and/or PDF based on config, "
                          "no updates will be made. Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--sync", dest="sync", action="store_true",
+                         help="Action directive. Sync between WooCommerce and MikroTik Product feed. "
+                         "Required unless you specify another action, only one action can be specified.")
+
   objParser.add_argument("--production",dest="production",action="store_true",help="flag to consent that you know you are running production config"
                          "if configuration file has environment variable set to production, the script will not run without this flag")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
@@ -1365,6 +1539,7 @@ def main():
   bFix = objArgs.fix
   bMikrotik = objArgs.mikrotik
   bConvert = objArgs.convert
+  bSync = objArgs.sync
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
            "and rewrite product descriptions.\n"
@@ -1375,15 +1550,15 @@ def main():
   LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
-  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bExport, bConvert])
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bExport, bConvert, bSync])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, --fix, --mikrotik, --export or --convert can be used.",0)
+             "Only one of --audit, --update, --import, --fix, --mikrotik, --sync, --export or --convert can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
-    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT, EXPORT or MIKROTIK: ")
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT, EXPORT, SYNC or MIKROTIK: ")
     strAction = strAction.upper()
-    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "EXPORT", "MIKROTIK"]:
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "EXPORT", "MIKROTIK", "SYNC"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
   if iActionCount == 1:
     # Determine and set the action string
@@ -1401,6 +1576,8 @@ def main():
       strAction = "CONVERT"
     elif bExport:
       strAction = "EXPORT"
+    elif bSync:
+      strAction = "SYNC"
   LogEntry("Selected action: {}".format(strAction),0)
 
   if FetchEnv("PROXY") is not None:
@@ -1684,11 +1861,16 @@ def main():
     else:
       LogEntry("MikroTik TokenField not found in config",0)
       strMTAPIKeyField = None
-    if "HostField" in objConfig["MikrotikCreds"]:
-      strMTURLField = objConfig["MikrotikCreds"]["HostField"]
+    if "StockReport" in objConfig["MikrotikCreds"]:
+      strMTStockURLField = objConfig["MikrotikCreds"]["StockReport"]
     else:
-      LogEntry("MikroTik HostField not found in config",0)
-      strMTURLField = None
+      LogEntry("MikroTik StockReport not found in config",0)
+      strMTStockURLField = None
+    if "ProductList" in objConfig["MikrotikCreds"]:
+      strMTProdURLField = objConfig["MikrotikCreds"]["ProductList"]
+    else:
+      LogEntry("MikroTik ProductList not found in config",0)
+      strMTStockURLField = None
   else:
     LogEntry("section MikrotikCreds not found in config",0)
 
@@ -1838,7 +2020,8 @@ def main():
     dictItemSpecs["vault_id"] = strMTVaultID
     dictItemSpecs["item_id"] = strMTItemID
     dictItemSpecs["metric_key"] = strMetricTokenField
-    dictItemSpecs["HostField"] = strMTURLField
+    dictItemSpecs["StockField"] = strMTStockURLField
+    dictItemSpecs["ProductField"] = strMTProdURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
@@ -1864,7 +2047,8 @@ def main():
     dictItemCollection["AICreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["MTSecret"] = strMTAPIKeyField
-    dictItemSpecs["HostField"] = strMTURLField
+    dictItemSpecs["StockField"] = strMTStockURLField
+    dictItemSpecs["ProductField"] = strMTProdURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["BSkey"] = strBSKeyField
@@ -1881,7 +2065,8 @@ def main():
   strAIAPIKey = dictReturn["AICreds"].get(strAIAPIKeyField)
   strMetricToken = dictReturn["AICreds"].get(strMetricTokenField)
   strMikrotikToken = dictReturn["MikrotikCreds"].get(strMTAPIKeyField)
-  strMikroTikURL = dictReturn["MikrotikCreds"].get(strMTURLField)
+  strMikroTikStockURL = dictReturn["MikrotikCreds"].get(strMTStockURLField)
+  strMikroTikProductURL = dictReturn["MikrotikCreds"].get(strMTProdURLField)
   strBSKey = dictReturn["UptimeCreds"].get(strBSKeyField)
 
   LogEntry("Credentials retrieved. Validating critical credentials and normalizing URLs.",1)
@@ -1893,12 +2078,12 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}".format(strBaseURL,strMetricURL,strMikroTikURL),1)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
-  strMikroTikURL = NormalizeToHttps(strMikroTikURL)
+  strMikroTikStockURL = NormalizeToHttps(strMikroTikStockURL)
   strIncidentURL = NormalizeToHttps(strIncidentURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikURL),1)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikStockURL),1)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -1956,6 +2141,9 @@ def main():
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
+  if strAction == "SYNC":
+    MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
+    LogEntry("Sync complete, teminating the script as no other work is needed",0,True)
   if strAction == "IMPORT":
     # The Import action takes place here
     LogEntry("Now starting import action...",0)
@@ -2352,15 +2540,15 @@ def main():
       objMTFileOut.write("{},{}\n".format(dictItem["code"], dictItem["count"]))
     objMTFileOut.close()
 
-  if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
+  if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikStockURL and lstReport:
     # For MikroTik action, post the stock levels to the MikroTik API. The API expects a list of items with code and count, and the API key for authentication.
-    LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikURL, len(lstReport)),0)
+    LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikStockURL, len(lstReport)),0)
     dictHeader = {}
     dictHeader["Content-Type"] = "application/json"
     dictUpdate = {}
     dictUpdate["apiKey"] = strMikrotikToken
     dictUpdate["report"] = lstReport
-    dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
+    dictResponse = MakeAPICall(strMikroTikStockURL, dictHeader, "post",dictPayload=dictUpdate)
     LogEntry("MikroTik API response: {}".format(dictResponse),0)
     if not dictResponse[0]["Success"]:
       LogEntry("Failed to post stock levels to MikroTik API.[{}]".format(dictResponse[1][0]["errormsg"]),0,True)
