@@ -831,7 +831,7 @@ async def get1PasswordItems(dictItemCollection:dict, strAccountName:str|None=Non
 
   return dictCollection
 
-def CleanExit(strCause:str,bLog:bool=True)->None:
+def CleanExit(strCause:str,bLog:bool=True,bNormal:bool=False)->None:
   """
   Handles cleaning things up before unexpected exit in case of an error.
   Things such as closing down open file handles, open database connections, etc.
@@ -839,18 +839,25 @@ def CleanExit(strCause:str,bLog:bool=True)->None:
   Parameters:
     Cause: simple string indicating cause of the termination, can be blank
     bLog: Optional, defaults to true. Boolean indicating if the cause should be logged before exiting.
+    bNormal: Option defaults to false. Boolean indicating if the exit is normal or abnormal.
   Returns:
     nothing as it terminates the script
   """
+  if bNormal:
+    strExitCode = ""
   if bLog:
-    LogEntry("{} is exiting abnormally on {}: {}".format(
+    if bNormal:
+      LogEntry("{} is exiting normally on {}: {}".format(
+        strScriptName, strScriptHost, strCause), 0)
+    else:
+      LogEntry("{} is exiting abnormally on {}: {}".format(
         strScriptName, strScriptHost, strCause), 0)
 
   if strHeartBeatURL:
     WebResponse = MakeAPICall(strHeartBeatURL+"/"+strExitCode,{},"HEAD",objData=strCause)
     LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
 
-  if strBSKey and strIncidentURL:
+  if strBSKey and strIncidentURL and not bNormal:
     WebResponse = CreateIncident("Script Failure", "Error in {} on {}".format(strScriptName, strScriptHost), "Script {} on host {} is exiting abnormally due to: {}".format(strScriptName, strScriptHost, strCause))
     LogEntry("BetterStack incident creation response: {}".format(WebResponse))
 
@@ -1375,9 +1382,9 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),1)
   for dictMTProd in dictMTProducts["data"]:
     if dictMTProd["product_code"] in dictProductbySKU:
-      LogEntry("{} exists in WooCommerce".format(dictMTProd))
+      LogEntry("{} exists in WooCommerce".format(dictMTProd["product_name"]))
     else:
-      LogEntry("{} doe not exists in WooCommerce".format(dictMTProd))
+      LogEntry("{} doe not exists in WooCommerce".format(dictMTProd["product_name"]))
 
 
 def main():
@@ -2141,9 +2148,11 @@ def main():
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
+
   if strAction == "SYNC":
     MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
-    LogEntry("Sync complete, teminating the script as no other work is needed",0,True)
+    CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
+
   if strAction == "IMPORT":
     # The Import action takes place here
     LogEntry("Now starting import action...",0)
