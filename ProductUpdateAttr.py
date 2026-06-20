@@ -1438,6 +1438,32 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
+    strPrice = dictMTProd.get("price")
+    if strPrice:
+      lstPrice = strPrice.split(" ")
+      if isNum(lstPrice[0]):
+        fPrice = float(lstPrice[0])
+      else:
+        LogEntry("price was not a number, setting price to zero")
+        fPrice = 0
+      if len(lstPrice) > 1:
+        strBaseCurrency = lstPrice[1]
+      else:
+        LogEntry("price did not include currency, assuming USD")
+        strBaseCurrency = "USD"
+      if len(strBaseCurrency) != 3:
+        LogEntry("Base currency of '{}' is not valid, defaulting to USD".format(strBaseCurrency))
+        strBaseCurrency = "USD"
+    else:
+      LogEntry("Price was not found in the response, setting it to 0.0 USD")
+      strBaseCurrency = "USD"
+      fPrice = 0
+    dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+    fExchRate = dictExchRate[strCurrency]
+    fLocalPrice = fPrice * fExchRate
+    fLocalRetail = fLocalPrice * fMarkup
+    if fLocalRetail == 0:
+      fLocalRetail = None
     lstProdAttribs = []
     if strImagePath:
       strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
@@ -1479,6 +1505,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       dictProduct["attributes"] = lstProdAttribs
       dictProduct["categories"] = [dictCategory]
       dictProduct["stock_quantity"] = 0
+      dictProduct["regular_price"] = fLocalRetail
 
       # Remove None values so payload stays clean
       dictCleaned = {}
@@ -1571,6 +1598,7 @@ def main():
   global strMTBrand
   global strCAPIkey
   global strCurURL
+  global fMarkup
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1587,6 +1615,7 @@ def main():
   fSpaceAfterHeader = 2.0
   fSpaceAfterParagraph = 3.0
   fSpaceAfterSection = 6.0
+  fMarkup = 0.0
   strCompanyName = ""
   strContactEmail = ""
   strCurrency = ""
@@ -1793,6 +1822,8 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
+  strMarkup = objConfig("MikroTik Details", "Markup", fallback="0").strip()
+  fMarkup = (int(strMarkup)/100) + 1
   strMTBrand = objConfig.get("MikroTik Details", "BrandName", fallback="MikroTik").strip().lower()
   strMTCategory = objConfig.get("MikroTik Details", "Category", fallback="").strip().lower()
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")

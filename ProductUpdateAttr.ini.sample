@@ -35,7 +35,6 @@ ProductImgPath = c:\temp\ProductImg
 BrandName = MikroTik
 Category = Mikrotik Products
 Markup = 20
-BaseCurrency = USD
 
 [Report Export]
 ReportFileName = ProductCatalog
