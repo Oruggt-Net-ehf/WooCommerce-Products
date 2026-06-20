@@ -1439,6 +1439,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
     strPrice = dictMTProd.get("price")
+    LogEntry("strPrice:{}".format(strPrice))
     if strPrice:
       lstPrice = strPrice.split(" ")
       if isNum(lstPrice[0]):
@@ -1458,13 +1459,17 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       LogEntry("Price was not found in the response, setting it to 0.0 USD")
       strBaseCurrency = "USD"
       fPrice = 0
+    LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
     dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
     fExchRate = dictExchRate[strCurrency]
+    LogEntry("Exchange rate is: {}".format(fExchRate))
     fLocalPrice = fPrice * fExchRate
+    LogEntry("Local Price: ".format(fLocalPrice))
     fLocalRetail = fLocalPrice * fMarkup
     if fLocalRetail == 0:
       fLocalRetail = None
     lstProdAttribs = []
+    LogEntry("Local Retail: {}".format(fLocalRetail))
     if strImagePath:
       strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
       os.makedirs(strFullPath, exist_ok=True)
@@ -1533,10 +1538,21 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     dictHeader = {}
     strMethod = "get"
     dictParams = {}
-    LogEntry("Fecthing exchange from {} to {}".format(strBaseCode, strCurrencies),0)
-    dictParams["apikey"] = strCAPIkey
-    dictParams["base_currency"] = strBaseCode
-    dictParams["currencies"] = strCurrencies
+    LogEntry("Fecthing exchange from {} to {} from {}".format(strBaseCode, strCurrencies,strCurURL),0)
+    if "apilayer" in strCurURL:
+      strKeyName = "access_key"
+      strCurBase = "source"
+      strCurrencyList = "currencies"
+    elif "currencyapi" in strCurURL:
+      strKeyName = "apikey"
+      strCurBase = "base_currency"
+      strCurrencyList = "currencies"
+    else:
+      LogEntry("Unknown URL, don't know what parameters are needed")
+      return {}
+    dictParams[strKeyName] = strCAPIkey
+    dictParams[strCurBase] = strBaseCode
+    dictParams[strCurrencyList] = strCurrencies
     strParams = urlLib.urlencode(dictParams)
     strURL = strCurURL + "?" + strParams
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod)
@@ -1545,8 +1561,15 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     LogEntry("API call successful, processing response. ",0)
     dictConvert = dictResponse[1]
     dictRates = {}
-    for strCode in dictConvert["data"]:
-      dictRates[strCode] = dictConvert["data"][strCode]["value"]
+    if "apilayer" in strCurURL:
+      if "quotes" in dictConvert:
+        for strCode in dictConvert["quotes"]:
+          dictRates[strCode[3:6]] = dictConvert["quotes"][strCode]
+    elif "currencyapi" in strCurURL:
+      for strCode in dictConvert["data"]:
+        dictRates[strCode] = dictConvert["data"][strCode]["value"]
+    else:
+      LogEntry("Unknown URL, don't know how to interpret the response")
   else:
     LogEntry("Unable to look up exchange rates, missing either URL, API key or both")
     dictRates = {}
@@ -2323,6 +2346,9 @@ def main():
     objAIClient = Anthropic(api_key=strAIAPIKey)
   else:
      objAIClient = None
+
+  #dictTest = ConvertCurrency("USD","isk,nok,sek,eur")
+  #CleanExit("Debug exit: {}".format(dictTest),True,True)
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
