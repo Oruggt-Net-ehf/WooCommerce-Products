@@ -2406,12 +2406,16 @@ def main():
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
-  dictExchangeRates = {}
-  for strSymbol in dictCurrencySymbols:
-    dictExchRate = ConvertCurrency(strSymbol,strCurrency)
-    dictExchangeRates[strCurrency] = dictExchRate[strCurrency]
 
   if strAction == "SYNC":
+    dictExchangeRates = {}
+    for strSymbol in dictCurrencySymbols:
+      if strSymbol != strCurrency:
+        dictExchRate = ConvertCurrency(strSymbol,strCurrency)
+        dictExchangeRates[strCurrency] = dictExchRate[strCurrency]
+    LogEntry("Loaded Currency Exchange rates.")
+    LogEntry("{}".format(dictExchangeRates))
+
     if strMikroTikProductURL and strMikrotikToken:
       MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
       CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
