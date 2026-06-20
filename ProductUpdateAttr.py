@@ -2412,7 +2412,7 @@ def main():
     for strSymbol in dictCurrencySymbols:
       if strSymbol != strCurrency:
         dictExchRate = ConvertCurrency(strSymbol,strCurrency)
-        dictExchangeRates[strCurrency] = dictExchRate[strCurrency]
+        dictExchangeRates[strSymbol] = dictExchRate[strCurrency]
     LogEntry("Loaded Currency Exchange rates.")
     LogEntry("{}".format(dictExchangeRates))
 
