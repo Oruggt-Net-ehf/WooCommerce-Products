@@ -1438,6 +1438,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
+    LogEntry("Looking at {} - {}".format(dictMTProd["product_code"], dictMTProd["product_name"]))
     strPrice = dictMTProd.get("price")
     LogEntry("strPrice:{}".format(strPrice))
     if strPrice:
@@ -1464,7 +1465,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
     fExchRate = dictExchRate[strCurrency]
     LogEntry("Exchange rate is: {}".format(fExchRate))
     fLocalPrice = fPrice * fExchRate
-    LogEntry("Local Price: ".format(fLocalPrice))
+    LogEntry("Local Price: {}".format(fLocalPrice))
     fLocalRetail = fLocalPrice * fMarkup
     if fLocalRetail == 0:
       fLocalRetail = None
@@ -1519,7 +1520,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
               dictCleaned[strKey] = strValue
       dictProduct = dictCleaned
 
-      LogEntry("{} {} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_name"], dictMTProd["product_name"]),0)
+      LogEntry("{} {} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_code"], dictMTProd["product_name"]),0)
 
       dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
       lstResults.append((dictMTProd["product_code"], dictResult))
@@ -1547,10 +1548,15 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
       strKeyName = "apikey"
       strCurBase = "base_currency"
       strCurrencyList = "currencies"
+    elif "frankfurter" in strCurURL:
+      strKeyName = ""
+      strCurBase = "base"
+      strCurrencyList = "quotes"
     else:
       LogEntry("Unknown URL, don't know what parameters are needed")
       return {}
-    dictParams[strKeyName] = strCAPIkey
+    if strKeyName:
+      dictParams[strKeyName] = strCAPIkey
     dictParams[strCurBase] = strBaseCode
     dictParams[strCurrencyList] = strCurrencies
     strParams = urlLib.urlencode(dictParams)
@@ -1558,7 +1564,7 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
-    LogEntry("API call successful, processing response. ",0)
+    LogEntry("API call successful, processing response. ",3)
     dictConvert = dictResponse[1]
     dictRates = {}
     if "apilayer" in strCurURL:
@@ -1568,6 +1574,9 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     elif "currencyapi" in strCurURL:
       for strCode in dictConvert["data"]:
         dictRates[strCode] = dictConvert["data"][strCode]["value"]
+    elif "frankfurter" in strCurURL:
+      for dictRate in dictConvert:
+        dictRates[dictRate["quote"]] = dictRate["rate"]
     else:
       LogEntry("Unknown URL, don't know how to interpret the response")
   else:
@@ -1622,6 +1631,7 @@ def main():
   global strCAPIkey
   global strCurURL
   global fMarkup
+  global dictExchangeRates
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1656,6 +1666,7 @@ def main():
 
   dictProxies = {}
   dictAttrEq = {}
+  dictExchangeRates = {}
   strOutDir = None
   objFileOut = None
   objCSVFileOut = None
@@ -2347,7 +2358,7 @@ def main():
   else:
      objAIClient = None
 
-  #dictTest = ConvertCurrency("USD","isk,nok,sek,eur")
+  #dictTest = ConvertCurrency("USD","isk,eur,nkk,sek,dkk")
   #CleanExit("Debug exit: {}".format(dictTest),True,True)
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
@@ -2395,6 +2406,10 @@ def main():
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
+  dictExchangeRates = {}
+  for strSymbol in dictCurrencySymbols:
+    dictExchRate = ConvertCurrency(strSymbol,strCurrency)
+    dictExchangeRates[strCurrency] = dictExchRate[strCurrency]
 
   if strAction == "SYNC":
     if strMikroTikProductURL and strMikrotikToken:
