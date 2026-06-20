@@ -1411,8 +1411,8 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
     LogEntry("Fetched {} Products".format(iProdCount),0)
     iPage += 1
     for dictProd in dictProducts:
-      LogEntry("sku: {} Name:{}".format(dictProd["sku"].lower(),dictProd["name"]),3)
-      dictProductbySKU[dictProd["sku"]] = dictProd["name"]
+      LogEntry("sku: {} Name:{}".format(dictProd["sku"],dictProd["name"]),3)
+      dictProductbySKU[dictProd["sku"].lower().strip()] = dictProd["name"]
   LogEntry("Downloaded {} products and assigned into Product by sku. count {}".format(iTotalProducts,len(dictProductbySKU)))
 
 
@@ -1426,7 +1426,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   LogEntry("API call successful, processing response. "
             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
   dictMTProducts = dictResponse[1]
-  iMTProdCount = len(dictMTProducts)
+  iMTProdCount = len(dictMTProducts["data"])
   LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
@@ -1441,7 +1441,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       for strImgURL in dictMTProd["images"]["small"]:
         SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
 
-    if dictMTProd["product_code"].lower() not in dictProductbySKU:
+    if dictMTProd["product_code"].lower().strip() not in dictProductbySKU:
       if dictMTProd["parameters"]:
         for dictattrib in dictMTProd["parameters"]:
           if dictattrib["name"] in dictAttrEq:
