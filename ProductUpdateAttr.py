@@ -1444,38 +1444,6 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   lstResults = []
   for dictMTProd in dictMTProducts["data"]:
     LogEntry("Looking at {} - {}".format(dictMTProd["product_code"], dictMTProd["product_name"]))
-    strPrice = dictMTProd.get("price")
-    LogEntry("strPrice:{}".format(strPrice))
-    if strPrice:
-      lstPrice = strPrice.split(" ")
-      if isNum(lstPrice[0]):
-        fPrice = float(lstPrice[0])
-      else:
-        LogEntry("price was not a number, setting price to zero")
-        fPrice = 0
-      if len(lstPrice) > 1:
-        strBaseCurrency = lstPrice[1]
-      else:
-        LogEntry("price did not include currency, assuming USD")
-        strBaseCurrency = "USD"
-      if len(strBaseCurrency) != 3:
-        LogEntry("Base currency of '{}' is not valid, defaulting to USD".format(strBaseCurrency))
-        strBaseCurrency = "USD"
-    else:
-      LogEntry("Price was not found in the response, setting it to 0.0 USD")
-      strBaseCurrency = "USD"
-      fPrice = 0
-    LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
-    dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
-    fExchRate = dictExchRate[strCurrency]
-    LogEntry("Exchange rate is: {}".format(fExchRate))
-    fLocalPrice = fPrice * fExchRate
-    LogEntry("Local Price: {}".format(fLocalPrice))
-    fLocalRetail = fLocalPrice * fMarkup
-    if fLocalRetail == 0:
-      fLocalRetail = None
-    lstProdAttribs = []
-    LogEntry("Local Retail: {}".format(fLocalRetail))
     if strImagePath:
       strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
       os.makedirs(strFullPath, exist_ok=True)
@@ -1487,6 +1455,38 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
         SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
 
     if dictMTProd["product_code"].lower().strip() not in dictProductbySKU:
+      strPrice = dictMTProd.get("price")
+      LogEntry("strPrice:{}".format(strPrice))
+      if strPrice:
+        lstPrice = strPrice.split(" ")
+        if isNum(lstPrice[0]):
+          fPrice = float(lstPrice[0])
+        else:
+          LogEntry("price was not a number, setting price to zero")
+          fPrice = 0
+        if len(lstPrice) > 1:
+          strBaseCurrency = lstPrice[1]
+        else:
+          LogEntry("price did not include currency, assuming USD")
+          strBaseCurrency = "USD"
+        if len(strBaseCurrency) != 3:
+          LogEntry("Base currency of '{}' is not valid, defaulting to USD".format(strBaseCurrency))
+          strBaseCurrency = "USD"
+      else:
+        LogEntry("Price was not found in the response, setting it to 0.0 USD")
+        strBaseCurrency = "USD"
+        fPrice = 0
+      LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
+      dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+      fExchRate = dictExchRate[strCurrency]
+      LogEntry("Exchange rate is: {}".format(fExchRate))
+      fLocalPrice = fPrice * fExchRate
+      LogEntry("Local Price: {}".format(fLocalPrice))
+      fLocalRetail = fLocalPrice * fMarkup
+      if fLocalRetail == 0:
+        fLocalRetail = None
+      lstProdAttribs = []
+      LogEntry("Local Retail: {}".format(fLocalRetail))
       if dictMTProd["parameters"]:
         for dictattrib in dictMTProd["parameters"]:
           if dictattrib["name"] in dictAttrEq:
