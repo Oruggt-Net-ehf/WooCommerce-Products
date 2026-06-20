@@ -1822,7 +1822,7 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
-  strMarkup = objConfig("MikroTik Details", "Markup", fallback="0").strip()
+  strMarkup = objConfig.get("MikroTik Details", "Markup", fallback="0").strip()
   fMarkup = (int(strMarkup)/100) + 1
   strMTBrand = objConfig.get("MikroTik Details", "BrandName", fallback="MikroTik").strip().lower()
   strMTCategory = objConfig.get("MikroTik Details", "Category", fallback="").strip().lower()
