@@ -1477,8 +1477,9 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
         strBaseCurrency = "USD"
         fPrice = 0
       LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
-      dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
-      fExchRate = dictExchRate[strCurrency]
+      #dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+      #fExchRate = dictExchRate[strCurrency]
+      fExchRate = dictExchangeRates[strCurrency]
       LogEntry("Exchange rate is: {}".format(fExchRate))
       fLocalPrice = fPrice * fExchRate
       LogEntry("Local Price: {}".format(fLocalPrice))
@@ -1544,7 +1545,7 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     dictHeader = {}
     strMethod = "get"
     dictParams = {}
-    LogEntry("Fecthing exchange from {} to {} from {}".format(strBaseCode, strCurrencies,strCurURL),0)
+    LogEntry("Fecthing the currency exchange rate from {} to {} from {}".format(strBaseCode, strCurrencies,strCurURL),0)
     if "apilayer" in strCurURL:
       strKeyName = "access_key"
       strCurBase = "source"
