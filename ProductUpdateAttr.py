@@ -981,6 +981,9 @@ def ParseJsonResponse(strText: str) -> dict:
     return json.loads(strCleaned)
 
 def NormalizeToHttps(strURL: str) -> str | None:
+    if not strURL:
+      return None
+
     parsedURL = urlLib.urlparse(strURL)
 
     # Already HTTPS
@@ -998,8 +1001,12 @@ def NormalizeToHttps(strURL: str) -> str | None:
     return None
 
 def IsFqdn(strHost: str) -> bool:
-    strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-    return bool(re.match(strPattern, strHost))
+    LogEntry("FQDN testing on {}".format(strHost),4)
+    if strHost:
+      strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+      return bool(re.match(strPattern, strHost))
+    else:
+      return False
 
 def GetFileHandle(strFileName:str, strperm:str)->object:
     """
@@ -1494,6 +1501,32 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
 
   return lstResults
 
+def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
+  if strCurURL and strCAPIkey:
+    dictHeader = {}
+    strMethod = "get"
+    dictParams = {}
+    LogEntry("Fecthing exchange from {} to {}".format(strBaseCode, strCurrencies),0)
+    dictParams["apikey"] = strCAPIkey
+    dictParams["base_currency"] = strBaseCode
+    dictParams["currencies"] = strCurrencies
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strCurURL + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. ",0)
+    dictConvert = dictResponse[1]
+    dictRates = {}
+    for dictEntry in dictConvert["data"]:
+      strCode = dictEntry["code"]
+      fValue = dictEntry["value"]
+      dictRates[strCode] = fValue
+  else:
+    LogEntry("Unable to look up exchange rates, missing either URL, API key or both")
+    dictRates = {}
+  return dictRates
+
 def main():
   global str1PassToken
   global bQuiet
@@ -1538,6 +1571,8 @@ def main():
   global strImagePath
   global strMTCategory
   global strMTBrand
+  global strCAPIkey
+  global strCurURL
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1564,6 +1599,8 @@ def main():
   strExitCode = "fail"
   strMTCategory = ""
   strMTBrand = "MikroTik"
+  strCAPIkey = ""
+  strCurURL = ""
 
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
@@ -1969,10 +2006,10 @@ def main():
       LogEntry("Currency API TokenField not found in config",0)
       strBSKeyField = None
     if "BaseURLField" in objConfig["Currency API"]:
-      strBaseURLField = objConfig["Currency API"]["BaseURLField"]
+      strCurrencyURLField = objConfig["Currency API"]["BaseURLField"]
     else:
       LogEntry("Currency BaseURLField not found in config",0)
-      strBaseURLField = None
+      strCurrencyURLField = None
   else:
     LogEntry("section Currency API not found in config",0)
 
@@ -2166,15 +2203,14 @@ def main():
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strAIVaultID
     dictItemSpecs["item_id"] = strAIItemID
-    dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemCollection["AICreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strMTVaultID
     dictItemSpecs["item_id"] = strMTItemID
-    dictItemSpecs["metric_key"] = strMetricTokenField
-    dictItemSpecs["StockField"] = strMTStockURLField
-    dictItemSpecs["ProductField"] = strMTProdURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
+    dictItemSpecs["vault_id"] = strCurVaultID
+    dictItemSpecs["item_id"] = strCurItemID
+    dictItemCollection["CurrencyCreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
       strAccountName, "provided" if str1PassToken else "not provided"),0)
@@ -2220,6 +2256,8 @@ def main():
   strMikroTikStockURL = dictReturn["MikrotikCreds"].get(strMTStockURLField)
   strMikroTikProductURL = dictReturn["MikrotikCreds"].get(strMTProdURLField)
   strBSKey = dictReturn["UptimeCreds"].get(strBSKeyField)
+  strCAPIkey = dictReturn["CurrencyCreds"].get(strCurKeyField)
+  strCurURL = dictReturn["CurrencyCreds"].get(strCurrencyURLField)
 
   LogEntry("Credentials retrieved. Validating critical credentials and normalizing URLs.",1)
 
@@ -2230,12 +2268,12 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL),1)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}\nIncident: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL,strIncidentURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
   strMikroTikStockURL = NormalizeToHttps(strMikroTikStockURL)
   strIncidentURL = NormalizeToHttps(strIncidentURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikStockURL),1)
+  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'\nIncident: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL,strIncidentURL),1)
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -2247,6 +2285,9 @@ def main():
     objAIClient = Anthropic(api_key=strAIAPIKey)
   else:
      objAIClient = None
+
+  dictExchange = ConvertCurrency("EUR","USD,CAD,ISK")
+  CleanExit("Currency Test\n{}".format(dictExchange),True,True)
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
