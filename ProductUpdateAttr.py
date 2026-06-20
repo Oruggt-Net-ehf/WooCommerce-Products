@@ -1518,10 +1518,8 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     LogEntry("API call successful, processing response. ",0)
     dictConvert = dictResponse[1]
     dictRates = {}
-    for dictEntry in dictConvert["data"]:
-      strCode = dictEntry["code"]
-      fValue = dictEntry["value"]
-      dictRates[strCode] = fValue
+    for strCode in dictConvert["data"]:
+      dictRates[strCode] = dictConvert["data"][strCode]["value"]
   else:
     LogEntry("Unable to look up exchange rates, missing either URL, API key or both")
     dictRates = {}
@@ -2059,7 +2057,7 @@ def main():
       strMTProdURLField = objConfig["MikrotikCreds"]["ProductList"]
     else:
       LogEntry("MikroTik ProductList not found in config",0)
-      strMTStockURLField = None
+      strMTProdURLField = None
   else:
     LogEntry("section MikrotikCreds not found in config",0)
 
@@ -2208,6 +2206,7 @@ def main():
     dictItemSpecs["vault_id"] = strMTVaultID
     dictItemSpecs["item_id"] = strMTItemID
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
+    dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strCurVaultID
     dictItemSpecs["item_id"] = strCurItemID
     dictItemCollection["CurrencyCreds"] = dictItemSpecs
@@ -2268,12 +2267,20 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}\nIncident: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL,strIncidentURL),1)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikStockURL: {}\n"
+           "MikroTickProductURL: {}\nIncident: {}\nCurrency: {}".format(strBaseURL,strMetricURL,
+                                        strMikroTikStockURL,strMikroTikProductURL,strIncidentURL,strCurURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
   strMikroTikStockURL = NormalizeToHttps(strMikroTikStockURL)
+  strMikroTikProductURL = NormalizeToHttps(strMikroTikProductURL)
   strIncidentURL = NormalizeToHttps(strIncidentURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'\nIncident: {}".format(strBaseURL,strMetricURL,strMikroTikStockURL,strIncidentURL),1)
+  strCurURL = NormalizeToHttps(strCurURL)
+  strMikroTikProductURL = NormalizeToHttps(strMikroTikProductURL)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikStockURL: {}\n"
+           "MikroTickProductURL: {}\nIncident: {}\nCurrency: {}".format(strBaseURL,strMetricURL,
+                                        strMikroTikStockURL,strMikroTikProductURL,strIncidentURL,strCurURL),1)
+
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -2285,9 +2292,6 @@ def main():
     objAIClient = Anthropic(api_key=strAIAPIKey)
   else:
      objAIClient = None
-
-  dictExchange = ConvertCurrency("EUR","USD,CAD,ISK")
-  CleanExit("Currency Test\n{}".format(dictExchange),True,True)
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
