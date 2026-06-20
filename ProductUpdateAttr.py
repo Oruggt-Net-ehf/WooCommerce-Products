@@ -1505,7 +1505,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       dictProduct["attributes"] = lstProdAttribs
       dictProduct["categories"] = [dictCategory]
       dictProduct["stock_quantity"] = 0
-      dictProduct["regular_price"] = fLocalRetail
+      dictProduct["regular_price"] = str(fLocalRetail)
 
       # Remove None values so payload stays clean
       dictCleaned = {}
