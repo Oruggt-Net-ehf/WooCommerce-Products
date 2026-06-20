@@ -1382,9 +1382,10 @@ def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret
 
 def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str)->None:
   dictBrandID = {}
-  dictBrandID["id"] = int(dictGlobalBrands["mikrotik"])
+  dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
   dictCategory = {}
-  dictCategory["id"] = int(dictGlobalCategories["mikrotik products"])
+  if strMTCategory:
+    dictCategory["id"] = int(dictGlobalCategories[strMTCategory])
 
   dictProductbySKU = {}
   iTotalProducts = 0
@@ -1470,6 +1471,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       dictProduct["brands"] = [dictBrandID]
       dictProduct["attributes"] = lstProdAttribs
       dictProduct["categories"] = [dictCategory]
+      dictProduct["stock_quantity"] = 0
 
       # Remove None values so payload stays clean
       dictCleaned = {}
@@ -1534,6 +1536,8 @@ def main():
   global strCurrencySymbol
   global strPriceNumDecimals
   global strImagePath
+  global strMTCategory
+  global strMTBrand
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1558,6 +1562,9 @@ def main():
   strCurrencySymbol = "ISK"
   strPriceNumDecimals = "0"
   strExitCode = "fail"
+  strMTCategory = ""
+  strMTBrand = "MikroTik"
+
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
@@ -1576,6 +1583,7 @@ def main():
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
+                                      "Also creates new products and updates product descriptions. "
                                       "If no config file is specified, it will look for {} in the same directory as the script. "
                                       "Requires one and only one Action directive. If omitted the script prompts for it.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
@@ -1750,6 +1758,8 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
+  strMTBrand = objConfig.get("MikroTik Details", "BrandName", fallback="MikroTik").strip().lower()
+  strMTCategory = objConfig.get("MikroTik Details", "Category", fallback="").strip().lower()
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
   strExportFile = objConfig.get("Report Export", "ReportFileName", fallback="ProductCatalog").strip()
   strContactEmail = objConfig.get("Report Export", "ContactEmail", fallback="").strip()
@@ -1940,6 +1950,31 @@ def main():
         iPerPage = iDefPerPage
   else:
     LogEntry("section Generic not found in config",0)
+
+  if "Currency API" in objConfig:
+    if strAuthMethod == "1pa":
+      if "VaultID" in objConfig["Currency API"]:
+        strCurVaultID = objConfig["Currency API"]["VaultID"]
+      else:
+        LogEntry("Currency API VaultID not found in config",0)
+        strBSVaultID = None
+      if "ItemID" in objConfig["Currency API"]:
+        strCurItemID = objConfig["Currency API"]["ItemID"]
+      else:
+        LogEntry("Currency API ItemID not found in config",0)
+        strBSItemID = None
+    if "TokenField" in objConfig["Currency API"]:
+      strCurKeyField = objConfig["Currency API"]["TokenField"]
+    else:
+      LogEntry("Currency API TokenField not found in config",0)
+      strBSKeyField = None
+    if "BaseURLField" in objConfig["Currency API"]:
+      strBaseURLField = objConfig["Currency API"]["BaseURLField"]
+    else:
+      LogEntry("Currency BaseURLField not found in config",0)
+      strBaseURLField = None
+  else:
+    LogEntry("section Currency API not found in config",0)
 
   if "UptimeCreds" in objConfig:
     if strAuthMethod == "1pa":
@@ -2260,8 +2295,11 @@ def main():
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
 
   if strAction == "SYNC":
-    MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
-    CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
+    if strMikroTikProductURL and strMikrotikToken:
+      MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
+      CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
+    else:
+      CleanExit("Missing either the MikroTikURL or the token, can't proceed.",True,False)
 
   if strAction == "IMPORT":
     # The Import action takes place here

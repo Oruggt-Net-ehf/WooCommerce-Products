@@ -28,6 +28,13 @@ AttrEqFile = AttrEq.csv
 #Filter = sku:E62iUGS-2axD5axT
 #Filter = category:! Featured Products !
 
+[MikroTik Details]
+ProductImgPath = c:\temp\ProductImg
+BrandName = MikroTik
+Category = Mikrotik Products
+Markup = 20
+BaseCurrency = USD
+
 [Report Export]
 ReportFileName = ProductCatalog
 ContactEmail = sales@oruggtnet.is
@@ -58,12 +65,13 @@ APIKeyField = ANTHROPIC_API_KEY
 MetricTokenField = BS_TOKEN
 
 [MikrotikCreds]
-VaultID = 1Password VaultID
-ItemID = 1Password ItemID
-TokenField = credential
-HostField = hostname
+TokenField = MTcredential
+StockReport = StockReport
+ProductList = ProductList
 
 [UptimeCreds]
-VaultID = 1Password VaultID
-ItemID = 1Password ItemID
-TokenField = credential
+TokenField = UTcredential
+
+[Currency API]
+TokenField = Curcredential
+BaseURLField = CurURL
