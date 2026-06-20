@@ -80,6 +80,11 @@ dictCurrencySymbols = {
     "CZK": "Kč",
     "HUF": "Ft",
     "RON": "lei",
+    "USD": "$",
+    "CAD": "$",
+    "AUD": "$",
+    "NZD": "$",
+    "JPY": "¥"
 }
 
 
