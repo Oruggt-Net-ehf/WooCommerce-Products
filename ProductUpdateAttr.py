@@ -1393,6 +1393,8 @@ def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret
   return lstVariations
 
 def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str)->None:
+  global dictExchangeRates
+
   dictBrandID = {}
   dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
   dictCategory = {}
@@ -1479,7 +1481,13 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
       LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
       #dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
       #fExchRate = dictExchRate[strCurrency]
-      fExchRate = dictExchangeRates[strCurrency]
+      if strCurrency in dictExchangeRates:
+        fExchRate = dictExchangeRates[strCurrency]
+      else:
+        dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+        fExchRate = dictExchRate[strCurrency]
+        dictExchangeRates[strCurrency] = fExchRate
+
       LogEntry("Exchange rate is: {}".format(fExchRate))
       fLocalPrice = fPrice * fExchRate
       LogEntry("Local Price: {}".format(fLocalPrice))
@@ -2414,11 +2422,11 @@ def main():
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
 
   if strAction == "SYNC":
-    dictExchangeRates = {}
-    for strSymbol in dictCurrencySymbols:
-      if strSymbol != strCurrency:
-        dictExchRate = ConvertCurrency(strSymbol,strCurrency)
-        dictExchangeRates[strSymbol] = dictExchRate[strCurrency]
+    #dictExchangeRates = {}
+    #for strSymbol in dictCurrencySymbols:
+    #  if strSymbol != strCurrency:
+    #    dictExchRate = ConvertCurrency(strSymbol,strCurrency)
+    #    dictExchangeRates[strSymbol] = dictExchRate[strCurrency]
     LogEntry("Loaded Currency Exchange rates.")
     LogEntry("{}".format(dictExchangeRates))
 
