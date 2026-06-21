@@ -22,6 +22,7 @@ Number of 1G Ethernet ports with Reverse PoE (PoE-in);1G PoE-in Ports
 Power Supply;Power Source
 Output Power Options;Power Output
 Type;Product Type
+Model;SKU
 Antenna gain dBi for Wireless 2;Antenna gain - Wireless 2
 Antenna gain dBi for Wireless 3;Antenna gain - Wireless 3
 Max power consumption without attachments;Max Power Consumed - base
