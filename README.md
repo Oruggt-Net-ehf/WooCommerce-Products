@@ -9,7 +9,9 @@ Script that analyzes the product description in WooCommerce and turns a spec lis
 
 Additionally, it can use the Anthropic API to rewrite product descriptions of specified products or create new products from a CSV import file using Anthropic AI to generate descriptions.
 
-Since I'm a MikroTik master distributor and frequently need to send stock reports back to HQ, I also added a function that finds all MikroTik products, pulls the stock and SKU from WooCommerce, sends them to the MikroTik API, and writes a CSV stock report. Additionally, there is a function that adds basic details for any new product that hasn't been added yet.
+Since I'm a MikroTik master distributor and frequently need to send stock reports back to MikroTik, I also added a function that finds all MikroTik products, pulls the stock and SKU from WooCommerce, sends them to the MikroTik API, and writes a CSV stock report.
+
+Another feature I added regarding MikroTik products is a function that adds basic details for any new product that hasn't been added yet. This is based on a product API from MikroTik. This API provides name, SKU, Price, product attribute collection, and a collection of product image URLs. This function checks whether the SKU is in WooCommerce and, if not, creates a new product in draft state, ready for the fix function to update the name and description. See more about this function below.
 
 Secret management is handled by 1Password by default (either in account mode or key mode), but can also be provided via environment variables, which supports any secret management that injects environment variables, such as Doppler. The names of the environment variables are configurable through the configuration file.
 
@@ -55,8 +57,20 @@ This action will loop through all products, look for MikroTik products, capture 
 
 ### Sync
 
-This action is intended only for MikroTik master distributors and ensures that all MikroTik products are available in your WooCommerce store. If it finds anything missing (like a newly released product), it will create a new draft product with basic details. You can then re-run the script with the FIX action to add a description and update the name.
-Also downloads all product images into a single directory specified in the configuration file, skipping images already in that folder.
+This action is intended only for MikroTik master distributors and ensures that all MikroTik products are listed in your WooCommerce store, and that the stock indicator shows customers whether you actually stock this item. If it finds anything missing (like a newly released product or something that was never added), it will create a new draft product with basic details. You can then re-run the script with the FIX action to add a description and update the name.
+
+As mentioned above, this is based on a product API from MikroTik. This API provides name, SKU, Price, product attribute collection, and a collection of product image URLs. The attribute collection is converted into a WooCommerce attribute collection and attached to the new draft product.
+
+The function will look up the currency exchange rate for your local currency (as specified in WooCommerce settings) using one of three services, then convert the price to your local currency, add the markup specified in the configuration file, and use that as the price for the new product. The function detects the service to use based on the URL configured in the [Currency API] section of the configuration file. Here are the services it can use:
+
+- [Currency API](https://currencyapi.com)
+- [The Frankfurter](https://frankfurter.dev)
+- [Currency Layer](https://currencylayer.com)
+
+The Frankfurter is free and unlimited, but it is refreshed only once a day. The other two charge for real-time feeds. Currently, Currency API is the least expensive at 10 USD per month for 15,000 requests. They are also the most generous with their free tier at 300 requests per month, which I burned through during my dev testing.
+
+Additionally, the function takes the image URL collection and downloads all product images into a single directory specified in the configuration file, skipping images that are already in that folder.
+
 Details on the MikroTik API can be found in your master distributor's [user account](https://mikrotik.com/client/userinfo) in the Account API key section, when logged in with your master distributor's account.
 
 ### Import
@@ -131,7 +145,6 @@ WooCommerce Product description parser and attrib creator. Also creates new prod
 `HeartBeatURL = https://uptime.betterstack.com/api/v1/heartbeat/q49e2LCdamHxyzabcRRozhALb` *(Heartbeat URL, optional)*\
 `IncidentURL = https://uptime.betterstack.com/api/v3/incidents` *(URL for the incident creation URL, optional)*\
 `OutDir = c:\temp` *(The directory where all write operations should take place)*\
-`ProductImgPath = c:\img\ProductImg`*(Only used by the sync operation as the directory to store the downloaded product images)*\
 `ImportFile = c:\temp\myimportfile.csv` *(Full path of the import file needed for import operations)*\
 `AIBackgroundFile = system.txt` *(File name for the AI system prompt)*\
 `AIModel = claude-sonnet-4-6` *(What AI model should we use?)*\
@@ -139,6 +152,12 @@ WooCommerce Product description parser and attrib creator. Also creates new prod
 `MaxCharIn = 500` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000. For category or tag you can filter either by ID number or name. For example `Filter = category:! Featured Products !` filters for any product that has a category name "! Featured Products !"*)\
+
+`[MikroTik Details]`\
+`ProductImgPath = c:\img\ProductImg`*(Only used by the sync operation as the directory to store the downloaded product images)*\
+`BrandName = MikroTik`*(How did you setup MikroTik in your WooCommerce Brands)*\
+`Category = Mikrotik Products`*(What is the name of the category, if any, that you want all new MikroTik products created with)*\
+`Markup = 20`*(When calculating the price in the store, how much markup do you want, 20 means 20%)*\
 
 `[Report Export]`\
 `ReportFileName = ProductCatalog` *(What should the export file be called, this will go in the outdir already defined and get appropriate extension)*\
@@ -177,12 +196,19 @@ WooCommerce Product description parser and attrib creator. Also creates new prod
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `TokenField = credential` *(The name of the field or env variable with the MikroTik API key)*\
-`HostField = hostname` *(The name of the field or env variable holding the URL to post the stock update to)*\
+`StockReport = StockReport` *(The name of the field or env variable holding the URL to post the stock update to)*\
+`ProductList = ProductList` *(The name of the field or env variable holding the URL to pull product information from)*\
 
 `[UptimeCreds]`\
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `TokenField = credential` *(The name of the field or env variable with the Uptime API key)*\
+
+`[Currency API]`\
+`VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
+`TokenField = credential` *(The name of the field or env variable with the Currency Service API key)*\
+`BaseURLField = hostname` *(Name of the field or env variable name holding the URL for the choicen Currency service, for example https://api.frankfurter.dev/v2/rates)*
 
 ### Attribute Substitution
 
