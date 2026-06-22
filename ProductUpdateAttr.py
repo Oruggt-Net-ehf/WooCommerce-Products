@@ -2427,8 +2427,8 @@ def main():
     #  if strSymbol != strCurrency:
     #    dictExchRate = ConvertCurrency(strSymbol,strCurrency)
     #    dictExchangeRates[strSymbol] = dictExchRate[strCurrency]
-    LogEntry("Loaded Currency Exchange rates.")
-    LogEntry("{}".format(dictExchangeRates))
+    #LogEntry("Loaded Currency Exchange rates.")
+    #LogEntry("{}".format(dictExchangeRates))
 
     if strMikroTikProductURL and strMikrotikToken:
       MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
@@ -2643,6 +2643,7 @@ def main():
           lstReport.append(dictReportItem)
       if strAction == "FIX":
         # Actual fix action
+        LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
         lstCleanTags = []
         if strFixTag and isinstance(strFixTag,str):
           lstCurTags = dictProduct["tags"]
@@ -2670,6 +2671,7 @@ def main():
 
       if strAction == "UPDATE" or strAction == "FIX" or strAction == "IMPORT":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
+        LogEntry("Finding tech specs in description and apply it as an attribute for id:{} name:{} sku:{}".format(dictProduct["id"],dictProduct["name"],dictProduct.get("sku")))
         bNeedUpdate = False
         for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
           if dictKey[0].strip() in dictAttrEq:
