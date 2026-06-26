@@ -1214,9 +1214,10 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
   iStatusCode = int(WebRequest.status_code)
   iTotal = int(WebRequest.headers.get("X-WP-Total", -1))
   iTotalPages = int(WebRequest.headers.get("X-WP-TotalPages", -1))
+  LogEntry("call resulted in total entries {} across {} pages".format(iTotal, iTotalPages), 1)
 
   if not 200 <= iStatusCode <= 299:
-    LogEntry("call resulted in status code {}".format(WebRequest.status_code),3)
+    LogEntry("call resulted in status code {}".format(WebRequest.status_code),2)
     strErrCode += str(iStatusCode)
     strErrText += WebRequest.text
     LogEntry("HTTP Error: {}".format(iStatusCode), 3)
