@@ -1695,21 +1695,22 @@ def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
         if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
           LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
+            strValue = " - " + strFilterValue
             strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
-            strValue = strFilterValue
           elif strFilterKey == "tag":
+            strValue =  " - " + strFilterValue
             strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
-            strValue = strFilterValue
         if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
           LogEntry("Filter value for {}:{} is a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
-            strValue = GetNameByID(dictGlobalCategories,strFilterValue)
+            strValue =  " - " + GetNameByID(dictGlobalCategories,strFilterValue)
           elif strFilterKey == "tag":
-            strValue = GetNameByID(dictGlobalTags,strFilterValue)
+            strValue =  " - " + GetNameByID(dictGlobalTags,strFilterValue)
         LogEntry("Filtering products with {} of {} {}".format(strFilterKey, strFilterValue,strValue),0)
         dictParams[strFilterKey] = strFilterValue
 
   dictParams["per_page"] = iPerPage
+  LogEntry("First caching all products needing fixing")
   while iProdCount > 0:
     LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
     dictParams["page"] = iPage
@@ -1727,6 +1728,7 @@ def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
     LogEntry("Fetched {} Products".format(iProdCount),0)
     iPage += 1
 
+  LogEntry("Now the actual fixings")
   for dictProduct in lstAllProducts:
     # Actual fix action
     LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
@@ -2734,15 +2736,24 @@ def main():
       strFilter = strFilter[:-1]
     lstFilters = strFilter.split("|")
     for lstFilter in lstFilters:
+      strValue = ""
       if ":" in lstFilter:
         strFilterKey, strFilterValue = lstFilter.split(":", 1)
         if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
           LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
+            strValue = " - " + strFilterValue
             strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
           elif strFilterKey == "tag":
+            strValue =  " - " + strFilterValue
             strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
-        LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
+        if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
+          LogEntry("Filter value for {}:{} is a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strValue =  " - " + GetNameByID(dictGlobalCategories,strFilterValue)
+          elif strFilterKey == "tag":
+            strValue =  " - " + GetNameByID(dictGlobalTags,strFilterValue)
+        LogEntry("Filtering products with {} of {} {}".format(strFilterKey, strFilterValue,strValue),0)
         dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
     dictParams["status"] = "publish"
