@@ -1669,6 +1669,7 @@ def GetNameByID(dictItems, strTargetId):
 def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
                 strAIModel:str,iMaxTokens:int,strBaseURL:str,strWCKey:str,strWCSecret:str)->None:
 
+  LogEntry("starting product fixing")
   dictBrandID = {}
   dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
   dictCategory = {}
@@ -1726,36 +1727,36 @@ def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
     LogEntry("Fetched {} Products".format(iProdCount),0)
     iPage += 1
 
-    for dictProduct in lstAllProducts:
-      # Actual fix action
-      LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
-      lstCleanTags = []
-      if strFixTag and isinstance(strFixTag,str):
-        lstCurTags = dictProduct["tags"]
-        for dictTag in lstCurTags:
-          if dictTag["name"].lower() != strFixTag.lower():
-              lstCleanTags.append(dictTag)
-      else:
-        lstCleanTags = dictProduct["tags"]
-      if len(dictProduct["description"]) < iMaxCharIn:
-        strPrompt = dictProduct["name"] + " " + dictProduct["description"]
-      else:
-        strPrompt = dictProduct["name"]
-      dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
-      if not isinstance(dictNewDesc,dict):
-        LogEntry("New Description is not a dict, something went wrong with AI generation, "
-                  "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,False)
-        continue
-      strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
-      strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
-      strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
-      dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
-        "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
-      if dictResult[0]["Success"]:
-        LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
-      else:
-        LogEntry("Failed to update product {} with new attributes. "
-                  "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+  for dictProduct in lstAllProducts:
+    # Actual fix action
+    LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
+    lstCleanTags = []
+    if strFixTag and isinstance(strFixTag,str):
+      lstCurTags = dictProduct["tags"]
+      for dictTag in lstCurTags:
+        if dictTag["name"].lower() != strFixTag.lower():
+            lstCleanTags.append(dictTag)
+    else:
+      lstCleanTags = dictProduct["tags"]
+    if len(dictProduct["description"]) < iMaxCharIn:
+      strPrompt = dictProduct["name"] + " " + dictProduct["description"]
+    else:
+      strPrompt = dictProduct["name"]
+    dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
+    if not isinstance(dictNewDesc,dict):
+      LogEntry("New Description is not a dict, something went wrong with AI generation, "
+                "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,False)
+      continue
+    strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
+    strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
+    strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
+    dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
+      "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+    if dictResult[0]["Success"]:
+      LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
+    else:
+      LogEntry("Failed to update product {} with new attributes. "
+                "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
 
 
 def main():
