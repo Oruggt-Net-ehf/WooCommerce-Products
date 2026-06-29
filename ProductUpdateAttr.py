@@ -274,6 +274,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
 
   Returns: A dictionary object with the respone
   """
+  global strMetricURL
 
   dictMessage = {}
   dictMessage["role"] = "user"
@@ -295,6 +296,10 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
     lstMetrics = Convert2OpenMetricGauge(dictPayload)
     WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken,strEndPoint=strMetricEndpoint)
     LogEntry("Response from metric server: {}".format(WebResponse),1)
+    if WebResponse[0]["Success"] == False:
+      LogEntry("Failed to post metrics",2)
+      if WebResponse[1][0]["errormsg"] == '{"error": "Quota exceeded"}':
+        strMetricURL = None
 
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
@@ -1656,8 +1661,8 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
   return dictRates
 
 def GetNameByID(dictItems, strTargetId):
-  for strName, strId in dictItems.items():
-    if strId == strTargetId:
+  for strName, intId in dictItems.items():
+    if intId == int(strTargetId):
       return strName
   return None
 
@@ -1695,7 +1700,7 @@ def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
             strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
             strValue = strFilterValue
         if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
-          LogEntry("Filter value for {}:{} is  a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          LogEntry("Filter value for {}:{} is a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
             strValue = GetNameByID(dictGlobalCategories,strFilterValue)
           elif strFilterKey == "tag":
