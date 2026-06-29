@@ -1550,6 +1550,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   return lstResults
 
 def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
+
   if strCurURL and strCAPIkey:
     dictHeader = {}
     strMethod = "get"
@@ -1598,6 +1599,72 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     LogEntry("Unable to look up exchange rates, missing either URL, API key or both")
     dictRates = {}
   return dictRates
+
+def FixProducts(strFixTag:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
+                strAIModel:str,iMaxTokens:int,strBaseURL:str,strWCKey:str,strWCSecret:str)->None:
+
+  dictBrandID = {}
+  dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
+  dictCategory = {}
+  if strMTCategory:
+    dictCategory["id"] = int(dictGlobalCategories[strMTCategory])
+
+  lstAllProducts = []
+  iTotalProducts = 0
+  iPage = 1
+  iProdCount = 5
+  strEndPoint = "/wp-json/wc/v3/products/"
+  dictHeader = {}
+  strMethod = "get"
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  while iProdCount > 0:
+    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
+    dictParams["page"] = iPage
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strBaseURL + strEndPoint + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. "
+             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+    lstProducts = dictResponse[1]
+    lstAllProducts.extend(lstProducts)
+    iProdCount = len(lstProducts)
+    iTotalProducts += iProdCount
+    LogEntry("Fetched {} Products".format(iProdCount),0)
+    iPage += 1
+
+    for dictProduct in lstAllProducts:
+      # Actual fix action
+      LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
+      lstCleanTags = []
+      if strFixTag and isinstance(strFixTag,str):
+        lstCurTags = dictProduct["tags"]
+        for dictTag in lstCurTags:
+          if dictTag["name"].lower() != strFixTag.lower():
+              lstCleanTags.append(dictTag)
+      else:
+        lstCleanTags = dictProduct["tags"]
+      if len(dictProduct["description"]) < iMaxCharIn:
+        strPrompt = dictProduct["name"] + " " + dictProduct["description"]
+      else:
+        strPrompt = dictProduct["name"]
+      dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
+      if not isinstance(dictNewDesc,dict):
+          LogEntry("New Description is not a dict, something went wrong with AI generation, "
+                  "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
+      strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
+      strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
+      strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
+      dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
+        "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+      if dictResult[0]["Success"]:
+        LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
+      else:
+        LogEntry("Failed to update product {} with new attributes. "
+                  "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+
 
 def main():
   global str1PassToken
@@ -2437,6 +2504,19 @@ def main():
     else:
       CleanExit("Missing either the MikroTikURL or the token, can't proceed.",True,False)
 
+  if strAction == "FIX":
+    # here is the fix function initialized
+    strFilter = ""
+    if strFixStatus is not None:
+      strFilter += "status:{}|".format(strFixStatus)
+    if strFixTag is not None:
+      strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
+    if strFixCategory is not None:
+      strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
+    FixProducts(strFixTag,iMaxCharIn,strAIsystem,objAIClient,strAIModel,iMaxTokens,strBaseURL,strWCKey,strWCSecret)
+    CleanExit("Fix complete, teminating the script as complete. "
+              "If other work is needed, re-run the script with other actions",True,True)
+
   if strAction == "IMPORT":
     # The Import action takes place here
     LogEntry("Now starting import action...",0)
@@ -2468,15 +2548,6 @@ def main():
     #Initializing MikroTik action
     LogEntry("Making sure no filter is applied for MikroTik action",0)
     strFilter = None
-  if strAction == "FIX":
-    # here is the fix function initialized
-    strFilter = ""
-    if strFixStatus is not None:
-      strFilter += "status:{}|".format(strFixStatus)
-    if strFixTag is not None:
-      strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
-    if strFixCategory is not None:
-      strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
 
   if strAction == "EXPORT":
     # Here is the export function initialized
@@ -2642,35 +2713,8 @@ def main():
           dictReportItem["code"] = dictProduct["sku"]
           dictReportItem["count"] = dictProduct["stock_quantity"]
           lstReport.append(dictReportItem)
-      if strAction == "FIX":
-        # Actual fix action
-        LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
-        lstCleanTags = []
-        if strFixTag and isinstance(strFixTag,str):
-          lstCurTags = dictProduct["tags"]
-          for dictTag in lstCurTags:
-            if dictTag["name"].lower() != strFixTag.lower():
-                lstCleanTags.append(dictTag)
-        else:
-          lstCleanTags = dictProduct["tags"]
-        if len(dictProduct["description"]) < iMaxCharIn:
-          strPrompt = dictProduct["name"] + " " + dictProduct["description"]
-        else:
-          strPrompt = dictProduct["name"]
-        dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
-        if not isinstance(dictNewDesc,dict):
-           LogEntry("New Description is not a dict, something went wrong with AI generation, "
-                    "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
-        strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
-        strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
-        strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
-        dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
-          "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
-        LogEntry("Finished updating description for product {}. Now extracting attributes from new description to update attributes if needed.".format(dictProduct["id"]),0)
-        dictAttributes = ExtractTwoColumnTables(strNewDesc)
-        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),0)
 
-      if strAction == "UPDATE" or strAction == "FIX" or strAction == "IMPORT":
+      if strAction == "UPDATE" or strAction == "IMPORT":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
         LogEntry("Finding tech specs in description and apply it as an attribute for id:{} name:{} sku:{}".format(dictProduct["id"],dictProduct["name"],dictProduct.get("sku")))
         bNeedUpdate = False
