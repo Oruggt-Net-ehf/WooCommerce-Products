@@ -283,7 +283,11 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   dictSystemPrompt["text"] = strSystem
   dictSystemPrompt["cache_control"] = {"type": "ephemeral"}
 
-  objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  try:
+    objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  except Exception as err:
+    LogEntry("failed to generate a description: {}".format(err))
+    return {}
   if strMetricURL:
     dictPayload = {}
     dictPayload["input_tokens"] = objMessage.usage.input_tokens
@@ -386,12 +390,8 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
         dictProduct = {}
-        dictProduct["status"] = "pending"
-        dictProduct["name"] = dictResult["Product_Name"]
         dictProduct["type"] = "simple"
         dictProduct["sku"] = strSKU
-        dictProduct["description"] = dictResult["description"]
-        dictProduct["short_description"] = dictResult["short_description"]
         dictProduct["backorders"] = strBackorders
         dictProduct["regular_price"] = strPrice if strPrice else None
         dictProduct["reviews_allowed"] = bAllowReviews
@@ -399,6 +399,19 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         dictProduct["global_unique_id"] = strGTIN
         dictProduct["brands"] = lstBrandID
         dictProduct["stock_quantity"] = int(strQTY)
+
+        if dictResult:
+          dictProduct["name"] = dictResult["Product_Name"]
+          dictProduct["description"] = dictResult["description"]
+          dictProduct["short_description"] = dictResult["short_description"]
+          dictProduct["status"] = "pending"
+        else:
+          dictProduct["status"] = "draft"
+          dictProduct["name"] = "{} {}".format(strBrand_asis,strProdName)
+          dictProduct["description"] = strDescr
+          dictProduct["short_description"] = strDescr
+          if iFixTagID:
+            dictProduct["tags"] = [{"id":iFixTagID}]
 
         # Remove None values so payload stays clean
         dictCleaned = {}
@@ -632,6 +645,48 @@ def CreateBrand(strBrandName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)
         return iNewBrandID
     else:
         LogEntry("Brand created but could not extract ID from response", 0, False)
+        return None
+
+def CreateTag(strTagName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->int|None:
+    """
+    Create a new global tag in WooCommerce and return its ID.
+
+    Parameters:
+        strTagName (str): The name of the tag to create
+        strBaseURL (str): The base URL of the WooCommerce site
+        strWCKey (str): WooCommerce API consumer key
+        strWCSecret (str): WooCommerce API consumer secret
+
+    Returns:
+        int: The ID of the newly created tag, or None if creation failed
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products/tags"
+    strURL = strBaseURL + strEndPoint
+
+    # Create the payload with the Tag name
+    dictPayload = {
+        "name": strTagName.strip()
+    }
+
+    LogEntry("Creating new tag: {}".format(strTagName), 2)
+
+    # Make the API call
+    dictResponse = MakeAPICall(strURL, dictHeader, strMethod, dictPayload, strUser=strWCKey, strPWD=strWCSecret)
+
+    # Check if the call was successful
+    if dictResponse[0]["Success"] == False:
+        LogEntry("Failed to create tag '{}'. Error: {}".format(strTagName, dictResponse[1]), 0, False)
+        return None
+
+    # Extract the ID from the response
+    if dictResponse[1] and isinstance(dictResponse[1], dict) and "id" in dictResponse[1]:
+        iNewTagID = dictResponse[1]["id"]
+        LogEntry("Successfully created Tag '{}' with ID: {}".format(strTagName, iNewTagID), 2)
+        return iNewTagID
+    else:
+        LogEntry("Tag created but could not extract ID from response", 0, False)
         return None
 
 def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
@@ -1600,7 +1655,13 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
     dictRates = {}
   return dictRates
 
-def FixProducts(strFixTag:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
+def GetNameByID(dictItems, strTargetId):
+  for strName, strId in dictItems.items():
+    if strId == strTargetId:
+      return strName
+  return None
+
+def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
                 strAIModel:str,iMaxTokens:int,strBaseURL:str,strWCKey:str,strWCSecret:str)->None:
 
   dictBrandID = {}
@@ -1617,6 +1678,31 @@ def FixProducts(strFixTag:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
   dictHeader = {}
   strMethod = "get"
   dictParams = {}
+  if strFilter:
+    if strFilter.endswith("|"):
+      strFilter = strFilter[:-1]
+    lstFilters = strFilter.split("|")
+    for lstFilter in lstFilters:
+      strValue = ""
+      if ":" in lstFilter:
+        strFilterKey, strFilterValue = lstFilter.split(":", 1)
+        if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
+          LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
+            strValue = strFilterValue
+          elif strFilterKey == "tag":
+            strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
+            strValue = strFilterValue
+        if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
+          LogEntry("Filter value for {}:{} is  a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strValue = GetNameByID(dictGlobalCategories,strFilterValue)
+          elif strFilterKey == "tag":
+            strValue = GetNameByID(dictGlobalTags,strFilterValue)
+        LogEntry("Filtering products with {} of {} {}".format(strFilterKey, strFilterValue,strValue),0)
+        dictParams[strFilterKey] = strFilterValue
+
   dictParams["per_page"] = iPerPage
   while iProdCount > 0:
     LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
@@ -1652,8 +1738,9 @@ def FixProducts(strFixTag:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
         strPrompt = dictProduct["name"]
       dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
       if not isinstance(dictNewDesc,dict):
-          LogEntry("New Description is not a dict, something went wrong with AI generation, "
-                  "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
+        LogEntry("New Description is not a dict, something went wrong with AI generation, "
+                  "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,False)
+        continue
       strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
       strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
       strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
@@ -1714,6 +1801,8 @@ def main():
   global strCurURL
   global fMarkup
   global dictExchangeRates
+  global strFixTag
+  global iFixTagID
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1743,6 +1832,8 @@ def main():
   strMTBrand = "MikroTik"
   strCAPIkey = ""
   strCurURL = ""
+  strFixTag = None
+  iFixTagID = None
 
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
@@ -2454,6 +2545,12 @@ def main():
   LogEntry("Global categories loaded, total {} categories".format(len(dictGlobalCategories)),0)
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
+  if strFixTag:
+    if strFixTag in dictGlobalTags:
+      iFixTagID = dictGlobalTags[strFixTag]
+    else:
+      iFixTagID = CreateTag(strFixTag,strBaseURL,strWCKey,strWCSecret)
+    LogEntry("Fix tag is {} which has an ID of {}".format(strFixTag,iFixTagID))
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
   dictTaxDetails = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
@@ -2513,7 +2610,8 @@ def main():
       strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
     if strFixCategory is not None:
       strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
-    FixProducts(strFixTag,iMaxCharIn,strAIsystem,objAIClient,strAIModel,iMaxTokens,strBaseURL,strWCKey,strWCSecret)
+
+    FixProducts(strFilter,iMaxCharIn,strAIsystem,objAIClient,strAIModel,iMaxTokens,strBaseURL,strWCKey,strWCSecret)
     CleanExit("Fix complete, teminating the script as complete. "
               "If other work is needed, re-run the script with other actions",True,True)
 
