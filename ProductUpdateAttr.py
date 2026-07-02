@@ -1549,7 +1549,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
         fExchRate = dictExchRate[strCurrency]
         dictExchangeRates[strCurrency] = fExchRate
 
-      LogEntry("Exchange rate is: {}".format(fExchRate))
+      LogEntry("1 {} is {} {} ".format(strCurrency,fExchRate,strBaseCurrency))
       fLocalPrice = fPrice * fExchRate
       LogEntry("Local Price: {}".format(fLocalPrice))
       fLocalRetail = fLocalPrice * fMarkup
@@ -2554,8 +2554,8 @@ def main():
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
   if strFixTag:
-    if strFixTag in dictGlobalTags:
-      iFixTagID = dictGlobalTags[strFixTag]
+    if strFixTag.lower() in dictGlobalTags:
+      iFixTagID = dictGlobalTags[strFixTag.lower()]
     else:
       iFixTagID = CreateTag(strFixTag,strBaseURL,strWCKey,strWCSecret)
     LogEntry("Fix tag is {} which has an ID of {}".format(strFixTag,iFixTagID))
@@ -2595,14 +2595,6 @@ def main():
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
 
   if strAction == "SYNC":
-    #dictExchangeRates = {}
-    #for strSymbol in dictCurrencySymbols:
-    #  if strSymbol != strCurrency:
-    #    dictExchRate = ConvertCurrency(strSymbol,strCurrency)
-    #    dictExchangeRates[strSymbol] = dictExchRate[strCurrency]
-    #LogEntry("Loaded Currency Exchange rates.")
-    #LogEntry("{}".format(dictExchangeRates))
-
     if strMikroTikProductURL and strMikrotikToken:
       MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
       CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
