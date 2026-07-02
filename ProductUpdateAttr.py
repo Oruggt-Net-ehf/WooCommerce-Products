@@ -387,7 +387,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             lstBrandID = [dictBrandID]
           else:
             lstBrandID = []
-
+        bFailure = False
         LogEntry("Done with basics for SKU {}. Generating product details using AI.".format(strSKU),1)
 
         strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
@@ -406,16 +406,29 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         dictProduct["stock_quantity"] = int(strQTY)
 
         if dictResult:
-          dictProduct["name"] = dictResult["Product_Name"]
-          dictProduct["description"] = dictResult["description"]
-          dictProduct["short_description"] = dictResult["short_description"]
+          if "Product_Name" in dictResult:
+            dictProduct["name"] = dictResult["Product_Name"]
+          else:
+            dictProduct["name"] = "{} {}".format(strBrand_asis,strProdName)
+          if dictResult["description"] in dictResult:
+            dictProduct["description"] = dictResult["description"]
+          else:
+            dictProduct["description"] = strDescr
+            bFailure = True
+          if "short_description" in dictResult:
+            dictProduct["short_description"] = dictResult["short_description"]
+          else:
+            dictProduct["short_description"] = strDescr
+            bFailure = True
           dictProduct["status"] = "pending"
         else:
+           bFailure = True
+        if bFailure:
           dictProduct["status"] = "draft"
           dictProduct["name"] = "{} {}".format(strBrand_asis,strProdName)
           dictProduct["description"] = strDescr
           dictProduct["short_description"] = strDescr
-          if iFixTagID:
+        if iFixTagID:
             dictProduct["tags"] = [{"id":iFixTagID}]
 
         # Remove None values so payload stays clean
@@ -1043,7 +1056,13 @@ def StripHTML(strHTML:str)->str:
 def ParseJsonResponse(strText: str) -> dict:
     strCleaned = re.sub(r"^```(?:json)?\n?", "", strText.strip())
     strCleaned = re.sub(r"\n?```$", "", strCleaned).strip()
-    return json.loads(strCleaned)
+    LogEntry("Attempting to json.loads on \n{}".format(strCleaned),3)
+    try:
+      dictReturn = json.loads(strCleaned)
+    except Exception as err:
+      LogEntry("Failed to convert strCleaned to dict through json.loads. Returning empty. Error: {}".format(err))
+      dictReturn = {}
+    return dictReturn
 
 def NormalizeToHttps(strURL: str) -> str | None:
     if not strURL:
