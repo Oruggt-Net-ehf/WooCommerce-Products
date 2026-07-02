@@ -21,6 +21,8 @@ import re
 import time
 import sys
 import json
+import random
+import string
 import requests
 import sentry_sdk
 import argparse
@@ -58,6 +60,14 @@ strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where t
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
 
+
+def CustomExcepthook(clsType, objValue, objTraceback):
+  strLocation = GetExceptionLocation(objTraceback)
+  CleanExit("unhandled exception: {} at {}. Details: {}".format(clsType, strLocation, objValue), bLog=True)
+  sys.__excepthook__(clsType, objValue, objTraceback)
+
+sys.excepthook = CustomExcepthook
+
 dictCurrencySymbols = {
     "EUR": "€",
     "ISK": "kr",
@@ -70,16 +80,173 @@ dictCurrencySymbols = {
     "CZK": "Kč",
     "HUF": "Ft",
     "RON": "lei",
+    "USD": "$",
+    "CAD": "$",
+    "AUD": "$",
+    "NZD": "$",
+    "JPY": "¥"
 }
 
-def CustomExcepthook(clsType, objValue, objTraceback):
-  strLocation = GetExceptionLocation(objTraceback)
-  CleanExit("unhandled exception: {} at {}. Details: {}".format(clsType, strLocation, objValue), bLog=True)
-  sys.__excepthook__(clsType, objValue, objTraceback)
-
-sys.excepthook = CustomExcepthook
 
 # sub defs
+
+def SaveImageFromUrl(strUrl:str, strOutputDir:str, intTimeoutSeconds:int=10)->bool:
+  """
+  Downloads an image from a URL and writes it to disk. Skips the
+  download if a file with that name already exists. Refuses to write
+  the file if the response's Content-Type isn't a recognized image
+  type. The saved file's extension always matches the actual
+  Content-Type, regardless of what extension the URL implied.
+
+  Args:
+    strUrl: full URL of the image to fetch
+    strOutputDir: destination directory; filename is taken from strUrl
+    intTimeoutSeconds: request timeout in seconds
+
+  Returns:
+    boolSuccess: True if the file is present on disk (downloaded or
+      already existing), False if the download failed
+  """
+  strFilename = ExtractFilenameFromUrl(strUrl)
+  strOutputPath = os.path.join(strOutputDir, strFilename)
+
+  if os.path.exists(strOutputPath):
+    LogEntry("Skipping download, file already exists: {}".format(strOutputPath),1)
+    return True
+
+  objResponse = None
+
+  try:
+    objResponse = requests.get(strUrl, stream=True, timeout=intTimeoutSeconds)
+  except requests.exceptions.RequestException as objError:
+    LogEntry("Failed to fetch image from {}: {}".format(strUrl, objError))
+    return False
+
+  if objResponse.status_code != 200:
+    LogEntry("Unexpected status code {} for {}".format(objResponse.status_code, strUrl))
+    return False
+
+  strContentType = objResponse.headers.get("Content-Type", "")
+  strExtension = GetExtensionFromContentType(strContentType)
+
+  if not strExtension:
+    LogEntry("Refusing to save, unrecognized content type for {}: {}".format(strUrl, strContentType))
+    return False
+
+  strBaseFilename, strUrlExtension = os.path.splitext(strFilename)
+  strFilename = strBaseFilename + strExtension
+  strOutputPath = os.path.join(strOutputDir, strFilename)
+
+  objFile = open(strOutputPath, mode="wb")
+
+  for bytChunk in objResponse.iter_content(chunk_size=8192):
+    objFile.write(bytChunk)
+
+  objFile.close()
+  del objResponse
+
+  return True
+
+def ExtractFilenameFromUrl(strUrl:str)->str:
+  """
+  Pulls the filename portion off the path component of a URL.  Falls
+  back to a name built from the last directory segment plus a random
+  suffix if the URL doesn't end in something usable.
+
+  Args:
+    strUrl: full URL string
+
+  Returns:
+    strFilename: the filename, e.g. "logo.png"
+  """
+  strParsedPath = urlLib.urlparse(strUrl).path
+  strFilename = os.path.basename(strParsedPath)
+
+  if not strFilename:
+    strFilename = BuildFallbackFilename(strParsedPath)
+
+  return strFilename
+
+def FindLastDir(strParsedPath:str)->str:
+  strLastDir = ""
+  lstParts = strParsedPath.split("/")
+  for strPart in reversed(lstParts):
+    if strPart:
+      strLastDir = strPart
+      break
+  return strLastDir
+
+def BuildFallbackFilename(strParsedPath:str)->str:
+  """
+  Builds a filename out of the last non-empty directory segment of a
+  URL path, plus a random suffix to avoid collisions.
+
+  Args:
+    strParsedPath: the .path component of a parsed URL
+
+  Returns:
+    strFilename: e.g. "products_x7f2k9qa"
+  """
+
+  strLastDir = FindLastDir(strParsedPath)
+
+  if not strLastDir:
+    strLastDir = "image"
+
+  strRandomSuffix = ""
+  for i in range(8):
+    strRandomSuffix += random.choice(string.ascii_lowercase + string.digits)
+
+  strFilename = "{}_{}".format(strLastDir, strRandomSuffix)
+
+  return strFilename
+
+def HasFileExtension(strFilename:str)->bool:
+  """
+  Checks whether a filename already has an extension.
+
+  Args:
+    strFilename: filename to check
+
+  Returns:
+    boolHasExtension: True if an extension is present
+  """
+  strBase, strExt = os.path.splitext(strFilename)
+
+  if strExt:
+    return True
+  else:
+    return False
+
+def GetExtensionFromContentType(strContentType:str)->str|None:
+  """
+  Maps a Content-Type header value to a file extension, using an
+  explicit table for the image types we expect to handle.
+
+  Args:
+    strContentType: raw header value, e.g. "image/jpeg; charset=utf-8"
+
+  Returns:
+    strExtension: e.g. ".jpg", or None if the mime type isn't in the table
+  """
+  if not strContentType:
+    return None
+
+  strMimeType = strContentType.split(";")[0].strip()
+
+  dctExtensionByMimeType = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/svg+xml": ".svg",
+  }
+
+  strExtension = dctExtensionByMimeType.get(strMimeType)
+
+  return strExtension
 
 def GetExceptionLocation(objTraceback:traceback.StackSummary)->str:
   objTB = traceback.extract_tb(objTraceback)
@@ -107,6 +274,7 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
 
   Returns: A dictionary object with the respone
   """
+  global strMetricURL
 
   dictMessage = {}
   dictMessage["role"] = "user"
@@ -116,7 +284,11 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
   dictSystemPrompt["text"] = strSystem
   dictSystemPrompt["cache_control"] = {"type": "ephemeral"}
 
-  objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  try:
+    objMessage = objClient.messages.create(model=strModel,max_tokens=iMaxToken,system=[dictSystemPrompt],messages=[dictMessage])
+  except Exception as err:
+    LogEntry("failed to generate a description: {}".format(err))
+    return {}
   if strMetricURL:
     dictPayload = {}
     dictPayload["input_tokens"] = objMessage.usage.input_tokens
@@ -124,11 +296,15 @@ def GenerateProductDescription(strDetails:str,strSystem:str, objClient:any, strM
     lstMetrics = Convert2OpenMetricGauge(dictPayload)
     WebResponse = SubmitMetric(lstMetrics,strMetricURL,strMetricToken,strEndPoint=strMetricEndpoint)
     LogEntry("Response from metric server: {}".format(WebResponse),1)
+    if WebResponse[0]["Success"] == False:
+      LogEntry("Failed to post metrics",2)
+      if WebResponse[1][0]["errormsg"] == '{"error": "Quota exceeded"}':
+        strMetricURL = None
 
   LogEntry("Description creation complete. Token In: {} Token Out: {}".format(objMessage.usage.input_tokens,objMessage.usage.output_tokens),1)
   return ParseJsonResponse(objMessage.content[0].text)
 
-def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, strWCSecret:str):
+def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, strWCSecret:str)->None:
     """
     Create a new WooCommerce product using the REST API.
     Parameters:
@@ -211,7 +387,7 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
             lstBrandID = [dictBrandID]
           else:
             lstBrandID = []
-
+        bFailure = False
         LogEntry("Done with basics for SKU {}. Generating product details using AI.".format(strSKU),1)
 
         strProdDetails = "{} {} {} {}".format(strProdName,strDescr, lstBrandID, strSKU)
@@ -219,12 +395,8 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         dictResult = GenerateProductDescription(strProdDetails,strAIsystem,objAIClient,strAIModel,iMaxTokens)
 
         dictProduct = {}
-        dictProduct["status"] = "pending"
-        dictProduct["name"] = dictResult["Product_Name"]
         dictProduct["type"] = "simple"
         dictProduct["sku"] = strSKU
-        dictProduct["description"] = dictResult["description"]
-        dictProduct["short_description"] = dictResult["short_description"]
         dictProduct["backorders"] = strBackorders
         dictProduct["regular_price"] = strPrice if strPrice else None
         dictProduct["reviews_allowed"] = bAllowReviews
@@ -232,6 +404,32 @@ def CreateWooCommerceProductsFromCSV(strCSVPath:str, strBaseURL:str, strWCKey:st
         dictProduct["global_unique_id"] = strGTIN
         dictProduct["brands"] = lstBrandID
         dictProduct["stock_quantity"] = int(strQTY)
+
+        if dictResult:
+          if "Product_Name" in dictResult:
+            dictProduct["name"] = dictResult["Product_Name"]
+          else:
+            dictProduct["name"] = "{} {}".format(strBrand_asis,strProdName)
+          if dictResult["description"] in dictResult:
+            dictProduct["description"] = dictResult["description"]
+          else:
+            dictProduct["description"] = strDescr
+            bFailure = True
+          if "short_description" in dictResult:
+            dictProduct["short_description"] = dictResult["short_description"]
+          else:
+            dictProduct["short_description"] = strDescr
+            bFailure = True
+          dictProduct["status"] = "pending"
+        else:
+           bFailure = True
+        if bFailure:
+          dictProduct["status"] = "draft"
+          dictProduct["name"] = "{} {}".format(strBrand_asis,strProdName)
+          dictProduct["description"] = strDescr
+          dictProduct["short_description"] = strDescr
+        if iFixTagID:
+            dictProduct["tags"] = [{"id":iFixTagID}]
 
         # Remove None values so payload stays clean
         dictCleaned = {}
@@ -383,7 +581,7 @@ def AttributeExists(listAttributeCollection:list, strSearchName:str)->str|bool:
 
     return "false"
 
-def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, strWCSecret:str):
+def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->None:
     """
     Create a new global attribute in WooCommerce and return its ID.
 
@@ -465,6 +663,48 @@ def CreateBrand(strBrandName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)
         return iNewBrandID
     else:
         LogEntry("Brand created but could not extract ID from response", 0, False)
+        return None
+
+def CreateTag(strTagName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->int|None:
+    """
+    Create a new global tag in WooCommerce and return its ID.
+
+    Parameters:
+        strTagName (str): The name of the tag to create
+        strBaseURL (str): The base URL of the WooCommerce site
+        strWCKey (str): WooCommerce API consumer key
+        strWCSecret (str): WooCommerce API consumer secret
+
+    Returns:
+        int: The ID of the newly created tag, or None if creation failed
+    """
+    dictHeader = {}
+    strMethod = "post"
+    strEndPoint = "/wp-json/wc/v3/products/tags"
+    strURL = strBaseURL + strEndPoint
+
+    # Create the payload with the Tag name
+    dictPayload = {
+        "name": strTagName.strip()
+    }
+
+    LogEntry("Creating new tag: {}".format(strTagName), 2)
+
+    # Make the API call
+    dictResponse = MakeAPICall(strURL, dictHeader, strMethod, dictPayload, strUser=strWCKey, strPWD=strWCSecret)
+
+    # Check if the call was successful
+    if dictResponse[0]["Success"] == False:
+        LogEntry("Failed to create tag '{}'. Error: {}".format(strTagName, dictResponse[1]), 0, False)
+        return None
+
+    # Extract the ID from the response
+    if dictResponse[1] and isinstance(dictResponse[1], dict) and "id" in dictResponse[1]:
+        iNewTagID = dictResponse[1]["id"]
+        LogEntry("Successfully created Tag '{}' with ID: {}".format(strTagName, iNewTagID), 2)
+        return iNewTagID
+    else:
+        LogEntry("Tag created but could not extract ID from response", 0, False)
         return None
 
 def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
@@ -706,7 +946,7 @@ async def get1PasswordItems(dictItemCollection:dict, strAccountName:str|None=Non
 
   return dictCollection
 
-def CleanExit(strCause:str,bLog=True):
+def CleanExit(strCause:str,bLog:bool=True,bNormal:bool=False)->None:
   """
   Handles cleaning things up before unexpected exit in case of an error.
   Things such as closing down open file handles, open database connections, etc.
@@ -714,18 +954,26 @@ def CleanExit(strCause:str,bLog=True):
   Parameters:
     Cause: simple string indicating cause of the termination, can be blank
     bLog: Optional, defaults to true. Boolean indicating if the cause should be logged before exiting.
+    bNormal: Option defaults to false. Boolean indicating if the exit is normal or abnormal.
   Returns:
     nothing as it terminates the script
   """
+  strLocalExitCode = strExitCode
+  if bNormal:
+    strLocalExitCode = ""
   if bLog:
-    LogEntry("{} is exiting abnormally on {}: {}".format(
+    if bNormal:
+      LogEntry("{} is exiting normally on {}: {}".format(
+        strScriptName, strScriptHost, strCause), 0)
+    else:
+      LogEntry("{} is exiting abnormally on {}: {}".format(
         strScriptName, strScriptHost, strCause), 0)
 
   if strHeartBeatURL:
-    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strExitCode,{},"HEAD",objData=strCause)
+    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strLocalExitCode,{},"HEAD",objData=strCause)
     LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
 
-  if strBSKey and strIncidentURL:
+  if strBSKey and strIncidentURL and not bNormal:
     WebResponse = CreateIncident("Script Failure", "Error in {} on {}".format(strScriptName, strScriptHost), "Script {} on host {} is exiting abnormally due to: {}".format(strScriptName, strScriptHost, strCause))
     LogEntry("BetterStack incident creation response: {}".format(WebResponse))
 
@@ -741,7 +989,7 @@ def CleanExit(strCause:str,bLog=True):
 
   sys.exit(9)
 
-def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False):
+def LogEntry(strMsg:str, iMsgLevel:int=0, bAbort:bool=False)->None:
   """
   This handles writing all event logs into the appropriate log facilities
   This could be a simple text log file, a database connection, etc.
@@ -808,9 +1056,18 @@ def StripHTML(strHTML:str)->str:
 def ParseJsonResponse(strText: str) -> dict:
     strCleaned = re.sub(r"^```(?:json)?\n?", "", strText.strip())
     strCleaned = re.sub(r"\n?```$", "", strCleaned).strip()
-    return json.loads(strCleaned)
+    LogEntry("Attempting to json.loads on \n{}".format(strCleaned),3)
+    try:
+      dictReturn = json.loads(strCleaned)
+    except Exception as err:
+      LogEntry("Failed to convert strCleaned to dict through json.loads. Returning empty. Error: {}".format(err))
+      dictReturn = {}
+    return dictReturn
 
 def NormalizeToHttps(strURL: str) -> str | None:
+    if not strURL:
+      return None
+
     parsedURL = urlLib.urlparse(strURL)
 
     # Already HTTPS
@@ -828,8 +1085,12 @@ def NormalizeToHttps(strURL: str) -> str | None:
     return None
 
 def IsFqdn(strHost: str) -> bool:
-    strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
-    return bool(re.match(strPattern, strHost))
+    LogEntry("FQDN testing on {}".format(strHost),4)
+    if strHost:
+      strPattern = r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+      return bool(re.match(strPattern, strHost))
+    else:
+      return False
 
 def GetFileHandle(strFileName:str, strperm:str)->object:
     """
@@ -1032,9 +1293,10 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
   iStatusCode = int(WebRequest.status_code)
   iTotal = int(WebRequest.headers.get("X-WP-Total", -1))
   iTotalPages = int(WebRequest.headers.get("X-WP-TotalPages", -1))
+  LogEntry("call resulted in total entries {} across {} pages".format(iTotal, iTotalPages), 1)
 
   if not 200 <= iStatusCode <= 299:
-    LogEntry("call resulted in status code {}".format(WebRequest.status_code),3)
+    LogEntry("call resulted in status code {}".format(WebRequest.status_code),2)
     strErrCode += str(iStatusCode)
     strErrText += WebRequest.text
     LogEntry("HTTP Error: {}".format(iStatusCode), 3)
@@ -1061,7 +1323,7 @@ def MakeAPICall(strURL:str, dictHeader:dict, strMethod:str, dictPayload:dict="",
       sentry_sdk.capture_exception(err)
       return ({"Success": False}, [dictReturn])
 
-def ParseHtmlToFlowables(objParent):
+def ParseHtmlToFlowables(objParent:any)->list:
   lstFlowables = []
   if isinstance(objParent, str):
     objParent = BeautifulSoup(objParent, features="html.parser")
@@ -1134,7 +1396,7 @@ def ParseHtmlToFlowables(objParent):
 
   return lstFlowables
 
-def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
+def GetProductTaxRate(lstTaxes:list, strBaseCountry:str, strTaxClass:str, strRegPrice:str)->tuple:
   if strTaxClass == "":
     strTaxClass = "standard"
 
@@ -1168,7 +1430,7 @@ def GetProductTaxRate(lstTaxes, strBaseCountry, strTaxClass, strRegPrice):
 
   return fPriceIncTax, strFormattedPrice
 
-def DrawFooter(objCanvas, objDoc):
+def DrawFooter(objCanvas:any, objDoc:any)->None:
   objCanvas.saveState()
   objCanvas.setFont("Helvetica", 10)
   strFooter = "{}  {} | All prices are in {} and include Icelandic VAT".format(strCompanyName, strContactEmail, strCurrency)
@@ -1176,13 +1438,13 @@ def DrawFooter(objCanvas, objDoc):
   objCanvas.drawCentredString(tPageSize[0] / 2, 10 * fUnit, "Page {}".format(objDoc.page))
   objCanvas.restoreState()
 
-def FetchImageBuffer(strUrl):
+def FetchImageBuffer(strUrl:str)->io.BytesIO:
   objResponse = requests.get(strUrl, timeout=10)
   if objResponse.status_code != 200:
     return None
   return io.BytesIO(objResponse.content)
 
-def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
+def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret:str)->list:
   lstVariations = []
   iPage = 1
   iProdCount = 5
@@ -1210,6 +1472,314 @@ def GetProductVariations(iProductId, strBaseURL,strWCKey,strWCSecret):
     iPage += 1
   return lstVariations
 
+def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTURL:str)->None:
+  global dictExchangeRates
+
+  dictBrandID = {}
+  dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
+  dictCategory = {}
+  if strMTCategory:
+    dictCategory["id"] = int(dictGlobalCategories[strMTCategory])
+
+  dictProductbySKU = {}
+  iTotalProducts = 0
+  iPage = 1
+  iProdCount = 5
+  strEndPoint = "/wp-json/wc/v3/products/"
+  dictHeader = {}
+  strMethod = "get"
+  dictParams = {}
+  dictParams["per_page"] = iPerPage
+  while iProdCount > 0:
+    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
+    dictParams["page"] = iPage
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strBaseURL + strEndPoint + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. "
+             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+    dictProducts = dictResponse[1]
+    iProdCount = len(dictProducts)
+    iTotalProducts += iProdCount
+    LogEntry("Fetched {} Products".format(iProdCount),0)
+    iPage += 1
+    for dictProd in dictProducts:
+      LogEntry("sku: {} Name:{}".format(dictProd["sku"],dictProd["name"]),3)
+      dictProductbySKU[dictProd["sku"].lower().strip()] = dictProd["name"]
+  LogEntry("Downloaded {} products and assigned into Product by sku. count {}".format(iTotalProducts,len(dictProductbySKU)))
+
+
+  dictParams = {}
+  dictParams["apiKey"]=strMTkey
+  strParams = urlLib.urlencode(dictParams)
+  strURL = strMTURL + "?" + strParams
+  dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+  if dictResponse[0]["Success"]==False:
+    LogEntry("API call to MikroTik Product API failed. {}".format(dictResponse[1]),0,True)
+  LogEntry("API call successful, processing response. "
+            "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+  dictMTProducts = dictResponse[1]
+  iMTProdCount = len(dictMTProducts["data"])
+  LogEntry("Fetched {} MikroTik Products".format(iMTProdCount),0)
+  lstResults = []
+  for dictMTProd in dictMTProducts["data"]:
+    LogEntry("Looking at {} - {}".format(dictMTProd["product_code"], dictMTProd["product_name"]))
+    if strImagePath:
+      strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"large")
+      os.makedirs(strFullPath, exist_ok=True)
+      for strImgURL in dictMTProd["images"]["large"]:
+        SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
+      strFullPath = os.path.join(strImagePath,dictMTProd["product_code"],"small")
+      os.makedirs(strFullPath, exist_ok=True)
+      for strImgURL in dictMTProd["images"]["small"]:
+        SaveImageFromUrl(strImgURL,strFullPath,iTimeOut)
+
+    if dictMTProd["product_code"].lower().strip() not in dictProductbySKU:
+      strPrice = dictMTProd.get("price")
+      LogEntry("strPrice:{}".format(strPrice))
+      if strPrice:
+        lstPrice = strPrice.split(" ")
+        if isNum(lstPrice[0]):
+          fPrice = float(lstPrice[0])
+        else:
+          LogEntry("price was not a number, setting price to zero")
+          fPrice = 0
+        if len(lstPrice) > 1:
+          strBaseCurrency = lstPrice[1]
+        else:
+          LogEntry("price did not include currency, assuming USD")
+          strBaseCurrency = "USD"
+        if len(strBaseCurrency) != 3:
+          LogEntry("Base currency of '{}' is not valid, defaulting to USD".format(strBaseCurrency))
+          strBaseCurrency = "USD"
+      else:
+        LogEntry("Price was not found in the response, setting it to 0.0 USD")
+        strBaseCurrency = "USD"
+        fPrice = 0
+      LogEntry("Looking up exchange rate between {} and {}".format(strBaseCurrency,strCurrency))
+      #dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+      #fExchRate = dictExchRate[strCurrency]
+      if strCurrency in dictExchangeRates:
+        fExchRate = dictExchangeRates[strCurrency]
+      else:
+        dictExchRate = ConvertCurrency(strBaseCurrency,strCurrency)
+        fExchRate = dictExchRate[strCurrency]
+        dictExchangeRates[strCurrency] = fExchRate
+
+      LogEntry("1 {} is {} {} ".format(strCurrency,fExchRate,strBaseCurrency))
+      fLocalPrice = fPrice * fExchRate
+      LogEntry("Local Price: {}".format(fLocalPrice))
+      fLocalRetail = fLocalPrice * fMarkup
+      if fLocalRetail == 0:
+        fLocalRetail = None
+      lstProdAttribs = []
+      LogEntry("Local Retail: {}".format(fLocalRetail))
+      if dictMTProd["parameters"]:
+        for dictattrib in dictMTProd["parameters"]:
+          if dictattrib["name"] in dictAttrEq:
+            strKey = dictAttrEq[dictattrib["name"]]
+            LogEntry("Changing attribute {} to {}".format(dictattrib["name"], strKey),0)
+          else:
+            strKey = dictattrib["name"]
+
+          if strKey.lower()[:28] in dictGlobalAttributes:
+            iAttrID = dictGlobalAttributes[strKey.lower()[:28]]
+          else:
+            LogEntry("Attribute {} not found in global attributes, creating it.".format(strKey),0)
+            iAttrID = CreateGlobalAttribute(strKey.strip(), strBaseURL, strWCKey, strWCSecret)
+            dictGlobalAttributes[strKey.lower()[:28]] = iAttrID
+          lstProdAttribs.append({"id": iAttrID, "visible": True, "variation": False, "options": [dictattrib["data"]]})
+      dictProduct = {}
+      dictProduct["status"] = "draft"
+      dictProduct["name"] = dictMTProd["product_name"]
+      dictProduct["type"] = "simple"
+      dictProduct["sku"] = dictMTProd["product_code"]
+      dictProduct["description"] = "MikroTik {} sku:{}".format(dictMTProd["product_name"],dictMTProd["product_code"])
+      dictProduct["short_description"] = "MikroTik {} sku:{}".format(dictMTProd["product_name"],dictMTProd["product_code"])
+      dictProduct["backorders"] = "no"
+      dictProduct["reviews_allowed"] = "false"
+      dictProduct["manage_stock"] = True
+      dictProduct["brands"] = [dictBrandID]
+      dictProduct["attributes"] = lstProdAttribs
+      dictProduct["categories"] = [dictCategory]
+      dictProduct["stock_quantity"] = 0
+      dictProduct["regular_price"] = str(fLocalRetail)
+
+      # Remove None values so payload stays clean
+      dictCleaned = {}
+      for strKey, strValue in dictProduct.items():
+          if strValue is not None:
+              dictCleaned[strKey] = strValue
+      dictProduct = dictCleaned
+
+      LogEntry("{} {} not found in WooCommerce. Creating it as a draft product".format(dictMTProd["product_code"], dictMTProd["product_name"]),0)
+
+      dictResult = CreateWooCommerceProduct(dictProduct, strBaseURL, strWCKey, strWCSecret)
+      lstResults.append((dictMTProd["product_code"], dictResult))
+      if dictResult:
+        if dictResult[0].get("Success"):
+          LogEntry("SKU {} Successful".format(dictMTProd["product_code"]),0)
+        else:
+          LogEntry("SKU {} had an issue. Code: {}, error: {}".format(dictMTProd["product_code"],dictResult[1][0].get("errcode"),dictResult[1][0].get("errormsg")),0)
+      else:
+          LogEntry("Something odd is going on. SKU {} does not have a valid result tuple".format(dictMTProd["product_code"]),0)
+
+  return lstResults
+
+def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
+
+  if strCurURL and strCAPIkey:
+    dictHeader = {}
+    strMethod = "get"
+    dictParams = {}
+    LogEntry("Fecthing the currency exchange rate from {} to {} from {}".format(strBaseCode, strCurrencies,strCurURL),0)
+    if "apilayer" in strCurURL:
+      strKeyName = "access_key"
+      strCurBase = "source"
+      strCurrencyList = "currencies"
+    elif "currencyapi" in strCurURL:
+      strKeyName = "apikey"
+      strCurBase = "base_currency"
+      strCurrencyList = "currencies"
+    elif "frankfurter" in strCurURL:
+      strKeyName = ""
+      strCurBase = "base"
+      strCurrencyList = "quotes"
+    else:
+      LogEntry("Unknown URL, don't know what parameters are needed")
+      return {}
+    if strKeyName:
+      dictParams[strKeyName] = strCAPIkey
+    dictParams[strCurBase] = strBaseCode
+    dictParams[strCurrencyList] = strCurrencies
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strCurURL + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. ",3)
+    dictConvert = dictResponse[1]
+    dictRates = {}
+    if "apilayer" in strCurURL:
+      if "quotes" in dictConvert:
+        for strCode in dictConvert["quotes"]:
+          dictRates[strCode[3:6]] = dictConvert["quotes"][strCode]
+    elif "currencyapi" in strCurURL:
+      for strCode in dictConvert["data"]:
+        dictRates[strCode] = dictConvert["data"][strCode]["value"]
+    elif "frankfurter" in strCurURL:
+      for dictRate in dictConvert:
+        dictRates[dictRate["quote"]] = dictRate["rate"]
+    else:
+      LogEntry("Unknown URL, don't know how to interpret the response")
+  else:
+    LogEntry("Unable to look up exchange rates, missing either URL, API key or both")
+    dictRates = {}
+  return dictRates
+
+def GetNameByID(dictItems, strTargetId):
+  for strName, intId in dictItems.items():
+    if intId == int(strTargetId):
+      return strName
+  return None
+
+def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
+                strAIModel:str,iMaxTokens:int,strBaseURL:str,strWCKey:str,strWCSecret:str)->None:
+
+  LogEntry("starting product fixing")
+  dictBrandID = {}
+  dictBrandID["id"] = int(dictGlobalBrands[strMTBrand])
+  dictCategory = {}
+  if strMTCategory:
+    dictCategory["id"] = int(dictGlobalCategories[strMTCategory])
+
+  lstAllProducts = []
+  iTotalProducts = 0
+  iPage = 1
+  iProdCount = 5
+  strEndPoint = "/wp-json/wc/v3/products/"
+  dictHeader = {}
+  strMethod = "get"
+  dictParams = {}
+  if strFilter:
+    if strFilter.endswith("|"):
+      strFilter = strFilter[:-1]
+    lstFilters = strFilter.split("|")
+    for lstFilter in lstFilters:
+      strValue = ""
+      if ":" in lstFilter:
+        strFilterKey, strFilterValue = lstFilter.split(":", 1)
+        if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
+          LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strValue = " - " + strFilterValue
+            strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
+          elif strFilterKey == "tag":
+            strValue =  " - " + strFilterValue
+            strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
+        if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
+          LogEntry("Filter value for {}:{} is a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strValue =  " - " + GetNameByID(dictGlobalCategories,strFilterValue)
+          elif strFilterKey == "tag":
+            strValue =  " - " + GetNameByID(dictGlobalTags,strFilterValue)
+        LogEntry("Filtering products with {} of {} {}".format(strFilterKey, strFilterValue,strValue),0)
+        dictParams[strFilterKey] = strFilterValue
+
+  dictParams["per_page"] = iPerPage
+  LogEntry("First caching all products needing fixing")
+  while iProdCount > 0:
+    LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
+    dictParams["page"] = iPage
+    strParams = urlLib.urlencode(dictParams)
+    strURL = strBaseURL + strEndPoint + "?" + strParams
+    dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
+    if dictResponse[0]["Success"]==False:
+      LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
+    LogEntry("API call successful, processing response. "
+             "{} total Products in response, {} total pages".format(iTotal, iTotalPages),2)
+    lstProducts = dictResponse[1]
+    lstAllProducts.extend(lstProducts)
+    iProdCount = len(lstProducts)
+    iTotalProducts += iProdCount
+    LogEntry("Fetched {} Products".format(iProdCount),0)
+    iPage += 1
+
+  LogEntry("Now the actual fixings")
+  for dictProduct in lstAllProducts:
+    # Actual fix action
+    LogEntry("Generating description and name for {} with sku: {}".format(dictProduct["name"],dictProduct.get("sku")))
+    lstCleanTags = []
+    if strFixTag and isinstance(strFixTag,str):
+      lstCurTags = dictProduct["tags"]
+      for dictTag in lstCurTags:
+        if dictTag["name"].lower() != strFixTag.lower():
+            lstCleanTags.append(dictTag)
+    else:
+      lstCleanTags = dictProduct["tags"]
+    if len(dictProduct["description"]) < iMaxCharIn:
+      strPrompt = dictProduct["name"] + " " + dictProduct["description"]
+    else:
+      strPrompt = dictProduct["name"]
+    dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
+    if not isinstance(dictNewDesc,dict):
+      LogEntry("New Description is not a dict, something went wrong with AI generation, "
+                "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,False)
+      continue
+    strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
+    strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
+    strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
+    dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
+      "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
+    if dictResult[0]["Success"]:
+      LogEntry("Successfully updated product {} with new attributes.".format(dictProduct["id"]),0)
+    else:
+      LogEntry("Failed to update product {} with new attributes. "
+                "Error: {}".format(dictProduct["id"], dictResult[1]),0,False)
+
+
 def main():
   global str1PassToken
   global bQuiet
@@ -1223,6 +1793,7 @@ def main():
   global dictGlobalCategories
   global dictGlobalTags
   global dictGlobalBrands
+  global dictAttrEq
   global iPerPage
   global strMetricURL
   global strMetricToken
@@ -1250,6 +1821,15 @@ def main():
   global strCurrencyPos
   global strCurrencySymbol
   global strPriceNumDecimals
+  global strImagePath
+  global strMTCategory
+  global strMTBrand
+  global strCAPIkey
+  global strCurURL
+  global fMarkup
+  global dictExchangeRates
+  global strFixTag
+  global iFixTagID
 
   objStyles = getSampleStyleSheet()
   objStyles["Title"].fontSize = 48
@@ -1266,6 +1846,7 @@ def main():
   fSpaceAfterHeader = 2.0
   fSpaceAfterParagraph = 3.0
   fSpaceAfterSection = 6.0
+  fMarkup = 0.0
   strCompanyName = ""
   strContactEmail = ""
   strCurrency = ""
@@ -1273,9 +1854,19 @@ def main():
   strCurrencyPos = "left"
   strCurrencySymbol = "ISK"
   strPriceNumDecimals = "0"
+  strExitCode = "fail"
+  strMTCategory = ""
+  strMTBrand = "MikroTik"
+  strCAPIkey = ""
+  strCurURL = ""
+  strFixTag = None
+  iFixTagID = None
+
   strPreamble = "This will be introductory text, such as instructions, contact info, etc. It can be left blank if not needed."
 
   dictProxies = {}
+  dictAttrEq = {}
+  dictExchangeRates = {}
   strOutDir = None
   objFileOut = None
   objCSVFileOut = None
@@ -1285,11 +1876,12 @@ def main():
   strHeartBeatURL = None
   strBSKey = None
   strIncidentURL = None
-  strExitCode = "fail"
+
 
   iLoc = sys.argv[0].rfind(".")
   strDefConf = sys.argv[0][:iLoc] + ".ini"
   objParser = argparse.ArgumentParser(description="WooCommerce Product description parser and attrib creator. "
+                                      "Also creates new products and updates product descriptions. "
                                       "If no config file is specified, it will look for {} in the same directory as the script. "
                                       "Requires one and only one Action directive. If omitted the script prompts for it.".format(strDefConf))
   objParser.add_argument("--silent", dest="silent",
@@ -1314,6 +1906,10 @@ def main():
   objParser.add_argument("--export", dest="export", action="store_true",
                          help="Action directive. Export all products to a CSV file and/or PDF based on config, "
                          "no updates will be made. Required unless you specify another action, only one action can be specified.")
+  objParser.add_argument("--sync", dest="sync", action="store_true",
+                         help="Action directive. Sync between WooCommerce and MikroTik Product feed. "
+                         "Required unless you specify another action, only one action can be specified.")
+
   objParser.add_argument("--production",dest="production",action="store_true",help="flag to consent that you know you are running production config"
                          "if configuration file has environment variable set to production, the script will not run without this flag")
   objParser.add_argument("-c", "--config",type=str, help="Path to the configuration file", default=strDefConf)
@@ -1365,6 +1961,7 @@ def main():
   bFix = objArgs.fix
   bMikrotik = objArgs.mikrotik
   bConvert = objArgs.convert
+  bSync = objArgs.sync
   LogEntry("This is a script to parse WooCommerce product description for specifications "
            "and create product attributes from it. Can also import new products "
            "and rewrite product descriptions.\n"
@@ -1375,15 +1972,15 @@ def main():
   LogEntry("Verbosity is set to {}".format(iVerbose),1)
 
   # Validate that only one action is specified
-  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bExport, bConvert])
+  iActionCount = sum([bAudit, bUpdate, bImport, bFix, bMikrotik, bExport, bConvert, bSync])
   if iActionCount > 1:
     LogEntry("Error: More than one action directive specified. "
-             "Only one of --audit, --update, --import, --fix, --mikrotik, --export or --convert can be used.",0)
+             "Only one of --audit, --update, --import, --fix, --mikrotik, --sync, --export or --convert can be used.",0)
     iActionCount = 0
   if iActionCount == 0:
-    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT, EXPORT or MIKROTIK: ")
+    strAction = input("Please specify action, one of AUDIT, UPDATE, IMPORT, FIX, CONVERT, EXPORT, SYNC or MIKROTIK: ")
     strAction = strAction.upper()
-    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "EXPORT", "MIKROTIK"]:
+    if strAction not in ["AUDIT", "UPDATE", "IMPORT", "FIX", "CONVERT", "EXPORT", "MIKROTIK", "SYNC"]:
       LogEntry("Invalid action directive '{}', aborting".format(strAction),0,True)
   if iActionCount == 1:
     # Determine and set the action string
@@ -1401,6 +1998,8 @@ def main():
       strAction = "CONVERT"
     elif bExport:
       strAction = "EXPORT"
+    elif bSync:
+      strAction = "SYNC"
   LogEntry("Selected action: {}".format(strAction),0)
 
   if FetchEnv("PROXY") is not None:
@@ -1434,6 +2033,7 @@ def main():
   except Exception as e:
     LogEntry("Error occurred while reading configuration file: {}".format(str(e)),0,True)
 
+  strImagePath = objConfig.get("Generic","ProductImgPath",fallback="")
   strEnvironment = objConfig.get("Generic","Environment",fallback="dev")
   bProdEnv = strEnvironment.lower().startswith("prod")
   if bProduction and not bProdEnv:
@@ -1456,6 +2056,10 @@ def main():
   )
 
   #sentry_sdk.capture_message("Test message from {}".format(strScriptName))
+  strMarkup = objConfig.get("MikroTik Details", "Markup", fallback="0").strip()
+  fMarkup = (int(strMarkup)/100) + 1
+  strMTBrand = objConfig.get("MikroTik Details", "BrandName", fallback="MikroTik").strip().lower()
+  strMTCategory = objConfig.get("MikroTik Details", "Category", fallback="").strip().lower()
   strExitCode = objConfig.get("Generic", "FailureCode", fallback="")
   strExportFile = objConfig.get("Report Export", "ReportFileName", fallback="ProductCatalog").strip()
   strContactEmail = objConfig.get("Report Export", "ContactEmail", fallback="").strip()
@@ -1647,6 +2251,31 @@ def main():
   else:
     LogEntry("section Generic not found in config",0)
 
+  if "Currency API" in objConfig:
+    if strAuthMethod == "1pa":
+      if "VaultID" in objConfig["Currency API"]:
+        strCurVaultID = objConfig["Currency API"]["VaultID"]
+      else:
+        LogEntry("Currency API VaultID not found in config",0)
+        strBSVaultID = None
+      if "ItemID" in objConfig["Currency API"]:
+        strCurItemID = objConfig["Currency API"]["ItemID"]
+      else:
+        LogEntry("Currency API ItemID not found in config",0)
+        strBSItemID = None
+    if "TokenField" in objConfig["Currency API"]:
+      strCurKeyField = objConfig["Currency API"]["TokenField"]
+    else:
+      LogEntry("Currency API TokenField not found in config",0)
+      strBSKeyField = None
+    if "BaseURLField" in objConfig["Currency API"]:
+      strCurrencyURLField = objConfig["Currency API"]["BaseURLField"]
+    else:
+      LogEntry("Currency BaseURLField not found in config",0)
+      strCurrencyURLField = None
+  else:
+    LogEntry("section Currency API not found in config",0)
+
   if "UptimeCreds" in objConfig:
     if strAuthMethod == "1pa":
       if "VaultID" in objConfig["UptimeCreds"]:
@@ -1684,11 +2313,16 @@ def main():
     else:
       LogEntry("MikroTik TokenField not found in config",0)
       strMTAPIKeyField = None
-    if "HostField" in objConfig["MikrotikCreds"]:
-      strMTURLField = objConfig["MikrotikCreds"]["HostField"]
+    if "StockReport" in objConfig["MikrotikCreds"]:
+      strMTStockURLField = objConfig["MikrotikCreds"]["StockReport"]
     else:
-      LogEntry("MikroTik HostField not found in config",0)
-      strMTURLField = None
+      LogEntry("MikroTik StockReport not found in config",0)
+      strMTStockURLField = None
+    if "ProductList" in objConfig["MikrotikCreds"]:
+      strMTProdURLField = objConfig["MikrotikCreds"]["ProductList"]
+    else:
+      LogEntry("MikroTik ProductList not found in config",0)
+      strMTProdURLField = None
   else:
     LogEntry("section MikrotikCreds not found in config",0)
 
@@ -1832,14 +2466,15 @@ def main():
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strAIVaultID
     dictItemSpecs["item_id"] = strAIItemID
-    dictItemSpecs["metric_key"] = strMetricTokenField
     dictItemCollection["AICreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["vault_id"] = strMTVaultID
     dictItemSpecs["item_id"] = strMTItemID
-    dictItemSpecs["metric_key"] = strMetricTokenField
-    dictItemSpecs["HostField"] = strMTURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
+    dictItemSpecs = {}
+    dictItemSpecs["vault_id"] = strCurVaultID
+    dictItemSpecs["item_id"] = strCurItemID
+    dictItemCollection["CurrencyCreds"] = dictItemSpecs
 
     LogEntry("Attempting to retrieve credentials from 1Password, with account name {} and token {}".format(
       strAccountName, "provided" if str1PassToken else "not provided"),0)
@@ -1864,7 +2499,8 @@ def main():
     dictItemCollection["AICreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["MTSecret"] = strMTAPIKeyField
-    dictItemSpecs["HostField"] = strMTURLField
+    dictItemSpecs["StockField"] = strMTStockURLField
+    dictItemSpecs["ProductField"] = strMTProdURLField
     dictItemCollection["MikrotikCreds"] = dictItemSpecs
     dictItemSpecs = {}
     dictItemSpecs["BSkey"] = strBSKeyField
@@ -1881,8 +2517,11 @@ def main():
   strAIAPIKey = dictReturn["AICreds"].get(strAIAPIKeyField)
   strMetricToken = dictReturn["AICreds"].get(strMetricTokenField)
   strMikrotikToken = dictReturn["MikrotikCreds"].get(strMTAPIKeyField)
-  strMikroTikURL = dictReturn["MikrotikCreds"].get(strMTURLField)
+  strMikroTikStockURL = dictReturn["MikrotikCreds"].get(strMTStockURLField)
+  strMikroTikProductURL = dictReturn["MikrotikCreds"].get(strMTProdURLField)
   strBSKey = dictReturn["UptimeCreds"].get(strBSKeyField)
+  strCAPIkey = dictReturn["CurrencyCreds"].get(strCurKeyField)
+  strCurURL = dictReturn["CurrencyCreds"].get(strCurrencyURLField)
 
   LogEntry("Credentials retrieved. Validating critical credentials and normalizing URLs.",1)
 
@@ -1893,12 +2532,20 @@ def main():
   if strMetricURL and not strMetricToken:
     LogEntry("You provided Metric URL but token is blank, disabling Metric posting",0)
     strMetricURL = None
-  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikURL: {}".format(strBaseURL,strMetricURL,strMikroTikURL),1)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikStockURL: {}\n"
+           "MikroTickProductURL: {}\nIncident: {}\nCurrency: {}".format(strBaseURL,strMetricURL,
+                                        strMikroTikStockURL,strMikroTikProductURL,strIncidentURL,strCurURL),1)
   strMetricURL = NormalizeToHttps(strMetricURL)
   strBaseURL = NormalizeToHttps(strBaseURL)
-  strMikroTikURL = NormalizeToHttps(strMikroTikURL)
+  strMikroTikStockURL = NormalizeToHttps(strMikroTikStockURL)
+  strMikroTikProductURL = NormalizeToHttps(strMikroTikProductURL)
   strIncidentURL = NormalizeToHttps(strIncidentURL)
-  LogEntry("URLs after normalization.\nBaseURL: '{}'\nMetricURL: '{}'\nMikroTikURL: '{}'".format(strBaseURL,strMetricURL,strMikroTikURL),1)
+  strCurURL = NormalizeToHttps(strCurURL)
+  strMikroTikProductURL = NormalizeToHttps(strMikroTikProductURL)
+  LogEntry("URLs before normalization.\nBaseURL: {}\nMetricURL: {}\nMikroTikStockURL: {}\n"
+           "MikroTickProductURL: {}\nIncident: {}\nCurrency: {}".format(strBaseURL,strMetricURL,
+                                        strMikroTikStockURL,strMikroTikProductURL,strIncidentURL,strCurURL),1)
+
   if not strBaseURL:
      LogEntry("Invalid BaseURL, unable to continue",0,True)
   if strMetricURL[:-1] != "/":
@@ -1911,6 +2558,9 @@ def main():
   else:
      objAIClient = None
 
+  #dictTest = ConvertCurrency("USD","isk,eur,nkk,sek,dkk")
+  #CleanExit("Debug exit: {}".format(dictTest),True,True)
+
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
   strMethod = "get"
@@ -1922,6 +2572,12 @@ def main():
   LogEntry("Global categories loaded, total {} categories".format(len(dictGlobalCategories)),0)
   dictGlobalTags = LoadDictionaries("/wp-json/wc/v3/products/tags", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global tags loaded, total {} tags".format(len(dictGlobalTags)),0)
+  if strFixTag:
+    if strFixTag.lower() in dictGlobalTags:
+      iFixTagID = dictGlobalTags[strFixTag.lower()]
+    else:
+      iFixTagID = CreateTag(strFixTag,strBaseURL,strWCKey,strWCSecret)
+    LogEntry("Fix tag is {} which has an ID of {}".format(strFixTag,iFixTagID))
   dictGlobalBrands = LoadDictionaries("/wp-json/wc/v3/products/brands", strBaseURL, strWCKey, strWCSecret)
   LogEntry("Global brands loaded, total {} brands".format(len(dictGlobalBrands)),0)
   dictTaxDetails = LoadTaxDetails(strBaseURL, strWCKey, strWCSecret)
@@ -1956,6 +2612,28 @@ def main():
   LogEntry("Tax details loaded. Base country: {}, prices include tax: {}, total tax classes: {}, currency: {}, currency position: {}, "
            "price decimal places: {}".format(strBaseCountry, strPricesIncludeTax, len(lstTaxes), strCurrency, strCurrencyPos, strPriceNumDecimals),0)
   strCurrencySymbol = dictCurrencySymbols.get(strCurrency, strCurrency)
+
+  if strAction == "SYNC":
+    if strMikroTikProductURL and strMikrotikToken:
+      MikroTikSync(strBaseURL,strWCKey,strWCSecret,strMikrotikToken,strMikroTikProductURL)
+      CleanExit("Sync complete, teminating the script as no other work is needed",True,True)
+    else:
+      CleanExit("Missing either the MikroTikURL or the token, can't proceed.",True,False)
+
+  if strAction == "FIX":
+    # here is the fix function initialized
+    strFilter = ""
+    if strFixStatus is not None:
+      strFilter += "status:{}|".format(strFixStatus)
+    if strFixTag is not None:
+      strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
+    if strFixCategory is not None:
+      strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
+
+    FixProducts(strFilter,iMaxCharIn,strAIsystem,objAIClient,strAIModel,iMaxTokens,strBaseURL,strWCKey,strWCSecret)
+    CleanExit("Fix complete, teminating the script as complete. "
+              "If other work is needed, re-run the script with other actions",True,True)
+
   if strAction == "IMPORT":
     # The Import action takes place here
     LogEntry("Now starting import action...",0)
@@ -1987,15 +2665,6 @@ def main():
     #Initializing MikroTik action
     LogEntry("Making sure no filter is applied for MikroTik action",0)
     strFilter = None
-  if strAction == "FIX":
-    # here is the fix function initialized
-    strFilter = ""
-    if strFixStatus is not None:
-      strFilter += "status:{}|".format(strFixStatus)
-    if strFixTag is not None:
-      strFilter += "tag:{}|".format(dictGlobalTags.get(strFixTag.lower(), strFixTag))
-    if strFixCategory is not None:
-      strFilter += "category:{}|".format(dictGlobalCategories.get(strFixCategory.lower(), strFixCategory))
 
   if strAction == "EXPORT":
     # Here is the export function initialized
@@ -2078,15 +2747,24 @@ def main():
       strFilter = strFilter[:-1]
     lstFilters = strFilter.split("|")
     for lstFilter in lstFilters:
+      strValue = ""
       if ":" in lstFilter:
         strFilterKey, strFilterValue = lstFilter.split(":", 1)
         if strFilterKey in ["category", "tag"] and not isNum(strFilterValue):
           LogEntry("Filter value for {}:{} is not a number, attempting to convert to ID using global dictionaries.".format(strFilterKey, strFilterValue),0)
           if strFilterKey == "category":
+            strValue = " - " + strFilterValue
             strFilterValue = dictGlobalCategories.get(strFilterValue.lower(), strFilterValue)
           elif strFilterKey == "tag":
+            strValue =  " - " + strFilterValue
             strFilterValue = dictGlobalTags.get(strFilterValue.lower(), strFilterValue)
-        LogEntry("Filtering products with {} of {}".format(strFilterKey, strFilterValue),0)
+        if strFilterKey in ["category", "tag"] and isNum(strFilterValue) and not strValue:
+          LogEntry("Filter value for {}:{} is a number, attempting to convert to name using global dictionaries.".format(strFilterKey, strFilterValue),0)
+          if strFilterKey == "category":
+            strValue =  " - " + GetNameByID(dictGlobalCategories,strFilterValue)
+          elif strFilterKey == "tag":
+            strValue =  " - " + GetNameByID(dictGlobalTags,strFilterValue)
+        LogEntry("Filtering products with {} of {} {}".format(strFilterKey, strFilterValue,strValue),0)
         dictParams[strFilterKey] = strFilterValue
   if strAction == "UPDATE": # Only update published products
     dictParams["status"] = "publish"
@@ -2161,35 +2839,10 @@ def main():
           dictReportItem["code"] = dictProduct["sku"]
           dictReportItem["count"] = dictProduct["stock_quantity"]
           lstReport.append(dictReportItem)
-      if strAction == "FIX":
-        # Actual fix action
-        lstCleanTags = []
-        if strFixTag and isinstance(strFixTag,str):
-          lstCurTags = dictProduct["tags"]
-          for dictTag in lstCurTags:
-            if dictTag["name"].lower() != strFixTag.lower():
-                lstCleanTags.append(dictTag)
-        else:
-          lstCleanTags = dictProduct["tags"]
-        if len(dictProduct["description"]) < iMaxCharIn:
-          strPrompt = dictProduct["name"] + " " + dictProduct["description"]
-        else:
-          strPrompt = dictProduct["name"]
-        dictNewDesc = GenerateProductDescription(strPrompt,strAIsystem,objAIClient,strAIModel,iMaxTokens)
-        if not isinstance(dictNewDesc,dict):
-           LogEntry("New Description is not a dict, something went wrong with AI generation, "
-                    "it returned a {} containing {}".format(type(dictNewDesc),dictNewDesc),0,True)
-        strNewDesc = dictNewDesc["description"] if "description" in dictNewDesc else dictProduct["description"]
-        strNewName = dictNewDesc["Product_Name"] if "Product_Name" in dictNewDesc else dictProduct["name"]
-        strShortDesc = dictNewDesc["short_description"] if "short_description" in dictNewDesc else dictProduct["short_description"]
-        dictResult = UpdateWooCommerceProduct({"description": strNewDesc, "status": "pending", "name": strNewName,
-          "short_description": strShortDesc, "tags": lstCleanTags}, dictProduct["id"], strBaseURL, strWCKey, strWCSecret)
-        LogEntry("Finished updating description for product {}. Now extracting attributes from new description to update attributes if needed.".format(dictProduct["id"]),0)
-        dictAttributes = ExtractTwoColumnTables(strNewDesc)
-        LogEntry("Extracted {} attributes from the new description".format(len(dictAttributes)),0)
 
-      if strAction == "UPDATE" or strAction == "FIX" or strAction == "IMPORT":
+      if strAction == "UPDATE" or strAction == "IMPORT":
         # Here is the real UPDATE work going on. Finding tech specs in description and apply it as an attribute
+        LogEntry("Finding tech specs in description and apply it as an attribute for id:{} name:{} sku:{}".format(dictProduct["id"],dictProduct["name"],dictProduct.get("sku")))
         bNeedUpdate = False
         for dictKey in dictAttributes.items(): # Loop through the dictionary of specs found in descriiption
           if dictKey[0].strip() in dictAttrEq:
@@ -2352,15 +3005,15 @@ def main():
       objMTFileOut.write("{},{}\n".format(dictItem["code"], dictItem["count"]))
     objMTFileOut.close()
 
-  if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikURL and lstReport:
+  if strAction == "MIKROTIK" and strMikrotikToken and strMikroTikStockURL and lstReport:
     # For MikroTik action, post the stock levels to the MikroTik API. The API expects a list of items with code and count, and the API key for authentication.
-    LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikURL, len(lstReport)),0)
+    LogEntry("Posting stock levels to MikroTik API at {} for {} products.".format(strMikroTikStockURL, len(lstReport)),0)
     dictHeader = {}
     dictHeader["Content-Type"] = "application/json"
     dictUpdate = {}
     dictUpdate["apiKey"] = strMikrotikToken
     dictUpdate["report"] = lstReport
-    dictResponse = MakeAPICall(strMikroTikURL, dictHeader, "post",dictPayload=dictUpdate)
+    dictResponse = MakeAPICall(strMikroTikStockURL, dictHeader, "post",dictPayload=dictUpdate)
     LogEntry("MikroTik API response: {}".format(dictResponse),0)
     if not dictResponse[0]["Success"]:
       LogEntry("Failed to post stock levels to MikroTik API.[{}]".format(dictResponse[1][0]["errormsg"]),0,True)

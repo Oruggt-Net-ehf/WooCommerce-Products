@@ -5,57 +5,77 @@ Copyright 2026 Siggi Bjarnason
 
 ## Introductions
 
-Script that analyzes product description in WooCommerce and turns a spec list into attributes. It does this by looking for a two column table treating the first column as the attribute and the second column as the value.
+Script that analyzes the product description in WooCommerce and turns a spec list into attributes. It does this by looking for a two-column table, treating the first column as the attribute and the second column as the value.
 
-Additionally it can use Anthropic API to rewrite product descriptions or create new products from a CSV import file using Anthropic AI to generate descriptions.
+Additionally, it can use the Anthropic API to rewrite product descriptions of specified products or create new products from a CSV import file using Anthropic AI to generate descriptions.
 
-Since I'm a MikroTik master distributor and I have a requirement to sent stock reports back to HQ I also added an function that can find all the MikroTik products, take the stock and sku from WooCommerce and send it to the MikroTik API as well as write a CSV stock report.
+Since I'm a MikroTik master distributor and frequently need to send stock reports back to MikroTik, I also added a function that finds all MikroTik products, pulls the stock and SKU from WooCommerce, sends them to the MikroTik API, and writes a CSV stock report.
 
-Secret management is by default handled by 1Password (either in account mode or key mode) but can optionally be fed in through environment variables which supports any secret managment that injects environment variables such as Doppler. The name of the environment variables is configurable through the configuration file.
+Another feature I added regarding MikroTik products is a function that adds basic details for any new product that hasn't been added yet. This is based on a product API from MikroTik. This API provides name, SKU, Price, product attribute collection, and a collection of product image URLs. This function checks whether the SKU is in WooCommerce and, if not, creates a new product in draft state, ready for the fix function to update the name and description. See more about this function below.
 
-If you provide an ingestion host and source token for a metric server like Better Stack telemetry server, the token consumption from each fix and import action will be logged there.
+Secret management is handled by 1Password by default (either in account mode or key mode), but can also be provided via environment variables, which supports any secret management that injects environment variables, such as Doppler. The names of the environment variables are configurable through the configuration file.
 
-Also sentry reporting is integrated. You provide your DSN in the configuration file or put it in env variable SENTRY_DSN. If you don't provide it at all, Sentry will be disabled
+If you provide an ingestion host and a source token for a metric server such as the Better Stack telemetry server, the token consumption for each fix and import action will be logged there.
 
-Heartbeat is also supported if you supply a heartbeat URL and failure code in the config file, all exits via error handling will be logged as incidents through the heartbeat function, if fail conditions are supported by it.
+Also, Sentry reporting is integrated. You can either provide your DSN in the configuration file or set the SENTRY_DSN environment variable. If you don't provide it at all, Sentry will be disabled
 
-If you provide a incident support system API URL and Key, all error handling exits will also generate an incident. The code assumes BetterStack incident system.
+Heartbeat is also supported if you supply a heartbeat URL and a failure code in the config file; all exits via error handling will be logged as incidents via the heartbeat function, if it supports it. The basics of the heartbeat function, though, is to track that the script ran at the expected time; whether it was successful or not is an extra function with some providers.
 
-There are five main actions this script can take. You can specify the desired action through a command line flag or have the script prompt for it.
+If you provide an incident support system API URL and Key, all error handling exits will also generate an incident. The code assumes the BetterStack incident system.
+
+There are eight main actions this script can take. You can specify the desired action through a command-line flag or have the script prompt for it.
 
 ## Action directives
 
 ### Audit
 
-This action goes through all the products that match the filter condition specified in the configuration file capturing few stats like how many attributes can be found in the description, how many characters the description is and how many attributes the product already has and writes it to a csv file along with name, sku and product id.
+This action goes through all the products that match the filter condition specified in the configuration file, capturing a few stats like how many attributes can be found in the description, how many characters the description is, and how many attributes the product already has, and writes it to a csv file along with name, SKU, and product ID.
 
-During audit no analysis is done if there is overlap between attributes found in description and actual attributes on the product, nor if if the attributes on the product are local or global. This is intended as quick indication of the status.
+During the audit, no analysis is performed if there is an overlap between the attributes in the description and the product's actual attributes, or if the attributes on the product are local or global. This is intended as a quick indication of the status.
 
 ### Export
 
-This action will generate a product catalog in csv, pdf or both as specified in configuration file. There are various configuration items in the report section to specify how the pdf report should look like.
+This action will generate a product catalog in CSV, PDF, or both as specified in the configuration file. There are various configuration items in the report section to specify how the PDF report should look.
 
 ### Update
 
-This action goes through all the products that match the filter condition specified in the configuration file. Here though, the script actually compares the attributes found in the description and compares it to the attributes on the product. If it is already on the product as a local attributes, it gets upgraded to global. If it is not on the product at all it gets added. If it is already on the product as a global attributed, it is left alone. Any attribute on the product but not in the description are left alone.
+This action traverses all products that match the filter condition specified in the configuration file. Here, though, the script actually compares the attributes in the description with those on the product. If it is already on the product as a local attribute, it gets upgraded to global. If it is not on the product at all, it gets added. If it is already on the product as a global attribute, it is left alone. Any attribute on the product but not in the description is left alone.
 
 ### Fix
 
-This action filters products based on configuration items FixStatus, FixTag and FixCategory, that is it pulls all products in specified status, with specified tag and in specified categories and uses Claude AI model specified in config to generate a new product name, product description and short discription based on the current name, and if the current product description is short enough it is added to the prompt as well. The allowable length of description is specified in number of characters which is configured with MaxCharIn. This allows for putting additional details about the product in the description field so the prompt is more detailed, yet avoids sending a fully formed 1000 words description to the prompt.
+This action filters products based on configuration items FixStatus, FixTag and FixCategory, that is it pulls all products in specified status, with specified tag and in specified categories and uses Claude AI model specified in config to generate a new product name, product description and short description based on the current name, and if the current product description is short enough it is added to the prompt as well. The allowable length of the description is specified in characters, configured by MaxCharIn. This allows adding additional product details to the description field, keeping the prompt more detailed while avoiding sending a fully formed 1000-word description to the prompt.
 
-Recommendation is to only update products in draft state, with a specific tag and uncategorized. The fix tag specified gets removed from the product once successfully processed.
+Recommendation is to update only products in the draft state, with a specific tag, and uncategorized. The fix tag specified is removed from the product once it is successfully processed.
 
 ### Convert
 
-This action will loop through the attribute collection in each product looking for a local attributes, then convert them to global attribute, either using existing ones or creating new ones.
+This action will loop through each product's attribute collection, looking for local attributes, then convert them to global attributes, either using existing ones or creating new ones.
 
 ### MikroTik
 
-This action will loop through all products looking for MikroTik devices, captures stock level and reports it MikroTik Corporate.
+This action will loop through all products, look for MikroTik products, capture their stock levels, and report them to MikroTik Corporate. Details on the MikroTik API can be found in your master distributor's [user account](https://mikrotik.com/client/userinfo) in the Account API key section, when logged in with your master distributor's account. The API key from your user account won't work, even though you get a 200 ok response.
+
+### Sync
+
+This action is intended only for MikroTik master distributors and ensures that all MikroTik products are listed in your WooCommerce store, and that the stock indicator shows customers whether you actually stock this item. If it finds anything missing (like a newly released product or something that was never added), it will create a new draft product with basic details. You can then re-run the script with the FIX action to add a description and update the name.
+
+As mentioned above, this is based on a product API from MikroTik. This API provides name, SKU, Price, product attribute collection, and a collection of product image URLs. The attribute collection is converted into a WooCommerce attribute collection and attached to the new draft product.
+
+The function will look up the currency exchange rate for your local currency (as specified in WooCommerce settings) using one of three services, then convert the price to your local currency, add the markup specified in the configuration file, and use that as the price for the new product. The function detects the service to use based on the URL configured in the [Currency API] section of the configuration file. Here are the services it can use:
+
+- [Currency API](https://currencyapi.com)
+- [The Frankfurter](https://frankfurter.dev)
+- [Currency Layer](https://currencylayer.com)
+
+The Frankfurter is free and unlimited, but it is refreshed only once a day. The other two charge for real-time feeds. Currently, Currency API is the least expensive at 10 USD per month for 15,000 requests. They are also the most generous with their free tier at 300 requests per month, which I burned through during my dev testing.
+
+Additionally, the function takes the image URL collection and downloads all product images into a single directory specified in the configuration file, skipping images that are already in that folder.
+
+Details on the MikroTik API can be found in your master distributor's [user account](https://mikrotik.com/client/userinfo) in the Account API key section, when logged in with your master distributor's account.
 
 ### Import
 
-Here you can import new product based on a CSV file and have Claude AI generate the description. Here is a sample content (from SampleImport.csv)
+Here you can import a new product based on a CSV file and have Claude AI generate the description. Here is a sample content (from SampleImport.csv)
 
 ``` CSV
 Brand,sku,EAN/GTIN,Name,Descr,Price,Stock,Allow Backorder,Enable Reviews
@@ -66,13 +86,13 @@ Anker,A1263 ,8.48061E+11,PowerCore 10000,the purple one,5795,8,notify,FALSE
 
 "Allow Backorder" and "Enable Reviews" allowed values are per the WooCommerce REST API specifications. Backorders allowed values are "yes", "no" and "notify"; reviews_allowed (Enable Reviews) is a simple boolean.
 
-Brand and sku is also known as make and model. EAN/GTIN is the global product number often found on barcodes, UPC is a form of a GTIN. Name is the product name and descr is additional details about the product, keep it short (less than 100 char). Price is a float and stock is an integer.
+Brand and SKU are also known as make and model. EAN/GTIN is the global product number often found on barcodes; UPC is a form of GTIN. Name is the product name, and descr is additional details about the product. Keep it short (less than 100 characters). Price is a float, and stock is an integer.
 
-Brand, sku, Name and descr is then combined (space deliminated) to form the AI prompt.
+Brand, SKU, Name and descr is then combined (space deliminated) to form the AI prompt.
 
 ## Operational details
 
-Following packages need to be installed
+The following packages need to be installed
 
 pip install requests\
 pip install sentry_sdk\
@@ -83,9 +103,9 @@ pip install reportlab
 
 ### CLI Explained
 
-`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [--export] [--production] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
+`usage: python ProductUpdateAttr.py [-h] [--silent] [--audit] [--update] [--import] [--fix] [--mikrotik] [--convert] [--export] [--sync] [--production] [-c CONFIG] [-v] [-x PROXY] [-o OUTDIR]`
 
-WooCommerce Product description parser and attrib creator. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
+WooCommerce Product description parser and attrib creator. Also creates new products and updates product descriptions. If no config file is specified, it will look for ProductUpdateAttr.ini in the same directory as the script. Requires one and only one Action directive. If omitted the script prompts for it.
 
 `options:`\
   `-h, --help`           show this help message and exit\
@@ -97,6 +117,7 @@ WooCommerce Product description parser and attrib creator. If no config file is 
   `--mikrotik`           Action directive. Update stock level with Mikrotik.Required unless you specify another action, only one action can be specified.
   `--convert`            Action directive. Convert local attributes to global ones.Required unless you specify another action, only one action can be specified.
   `--export`             Action directive. Export all products to a CSV file and/or PDF based on config, no updates will be made. Required unless you specify another action, only one action can be specified.
+  `--sync`               Action directive. Sync between WooCommerce and MikroTik Product feed. Required unless you specify another action, only one action can be specified.
   `--production`         flag to consent that you know you are running production config. If configuration file has environment variable set to production, the script will not run without this flag. Conversely setting this flag if configuration environment is not set to production will stop the script cold.
   `-c, --config CONFIG`  Path to the configuration file. Optional. Defaults to ProductUpdateAttr.ini in the same directory as the script.\
   `-v, --verbosity`      Verbose output, vv level 2 vvvv level 4\
@@ -131,6 +152,12 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `MaxCharIn = 500` *(If the long description has fewer characters than this, include it with the name in the prompt for update operations. Defaults to 0)*\
 `AttrEqFile = AttrEq.csv` *(Attributes Substitution file)*\
 `Filter = sku:Q208` *(Filter specification per WooCommerce REST API specifications. Use : to seperate attribute and value. Specify multiple filter specification by using | as the seperator. For example:`status:draft|type:simple|min_price:18000` filters for simple products in draft status with price over 18000. For category or tag you can filter either by ID number or name. For example `Filter = category:! Featured Products !` filters for any product that has a category name "! Featured Products !"*)\
+
+`[MikroTik Details]`\
+`ProductImgPath = c:\img\ProductImg`*(Only used by the sync operation as the directory to store the downloaded product images)*\
+`BrandName = MikroTik`*(How did you setup MikroTik in your WooCommerce Brands)*\
+`Category = Mikrotik Products`*(What is the name of the category, if any, that you want all new MikroTik products created with)*\
+`Markup = 20`*(When calculating the price in the store, how much markup do you want, 20 means 20%)*\
 
 `[Report Export]`\
 `ReportFileName = ProductCatalog` *(What should the export file be called, this will go in the outdir already defined and get appropriate extension)*\
@@ -169,12 +196,19 @@ WooCommerce Product description parser and attrib creator. If no config file is 
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `TokenField = credential` *(The name of the field or env variable with the MikroTik API key)*\
-`HostField = hostname` *(The name of the field or env variable holding the URL to post the stock update to)*\
+`StockReport = StockReport` *(The name of the field or env variable holding the URL to post the stock update to)*\
+`ProductList = ProductList` *(The name of the field or env variable holding the URL to pull product information from)*\
 
 `[UptimeCreds]`\
 `VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
 `ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
 `TokenField = credential` *(The name of the field or env variable with the Uptime API key)*\
+
+`[Currency API]`\
+`VaultID = xxxxx` *(1Password vault ID where item is kept, leave off for env auth)*\
+`ItemID = yyyyy` *(The item of the item holding the Anthropic API credentials, leave off for env auth)*\
+`TokenField = credential` *(The name of the field or env variable with the Currency Service API key)*\
+`BaseURLField = hostname` *(Name of the field or env variable name holding the URL for the choicen Currency service, for example https://api.frankfurter.dev/v2/rates)*
 
 ### Attribute Substitution
 
