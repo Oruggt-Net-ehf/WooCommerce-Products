@@ -90,6 +90,38 @@ dictCurrencySymbols = {
 
 # sub defs
 
+def CreateURL(strBaseURL:str, strEndPoint:str, dictParams:dict={})->str:
+    """
+    Takes a base URL, endpoint and a dictionary of URL parameters and
+    constucts a valid URL. Detects if API testing has been invoked and
+    gives back just the base URL.
+    For example:
+    Base: https://example.com
+    Endpoint: api/v2/list
+    params: {"test":true,"output":true}
+    returns: https://example.com/api/v2/list?test=true&output=true
+
+    Args:
+    strBaseURL (string): Base URL
+    strEndPoint (string): Endpoint
+    dictParams: Parameter dictionary
+
+    Returns:
+    String with the composed URL
+
+    """
+
+    if "apisim" in strBaseURL:
+      return strBaseURL
+
+    if not strBaseURL.endswith("/"):
+      strBaseURL += "/"
+    if dictParams:
+      strParams = urlLib.urlencode(dictParams)
+      return strBaseURL + strEndPoint + "?" + strParams
+    else:
+      return strBaseURL + strEndPoint
+
 def SaveImageFromUrl(strUrl:str, strOutputDir:str, intTimeoutSeconds:int=10)->bool:
   """
   Downloads an image from a URL and writes it to disk. Skips the
@@ -319,7 +351,7 @@ def CreateWooCommerceProduct(dictProduct:dict, strBaseURL:str, strWCKey:str, str
     dictHeader = {}
     strMethod = "post"
     strEndPoint = "/wp-json/wc/v3/products"
-    strURL = strBaseURL + strEndPoint
+    strURL = CreateURL(strBaseURL,strEndPoint,{})
 
     LogEntry("Creating WooCommerce product SKU: {}".format(dictProduct.get("sku")),2)
     return MakeAPICall(strURL, dictHeader, strMethod, dictProduct, strUser=strWCKey, strPWD=strWCSecret)
@@ -597,7 +629,7 @@ def CreateGlobalAttribute(strAttributeName:str, strBaseURL:str, strWCKey:str, st
     dictHeader = {}
     strMethod = "post"
     strEndPoint = "/wp-json/wc/v3/products/attributes"
-    strURL = strBaseURL + strEndPoint
+    strURL = CreateURL(strBaseURL,strEndPoint,{})
 
     # Create the payload with the attribute name
     dictPayload = {
@@ -639,7 +671,7 @@ def CreateBrand(strBrandName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)
     dictHeader = {}
     strMethod = "post"
     strEndPoint = "/wp-json/wc/v3/products/brands"
-    strURL = strBaseURL + strEndPoint
+    strURL = CreateURL(strBaseURL,strEndPoint,{})
 
     # Create the payload with the brand name
     dictPayload = {
@@ -681,7 +713,7 @@ def CreateTag(strTagName:str, strBaseURL:str, strWCKey:str, strWCSecret:str)->in
     dictHeader = {}
     strMethod = "post"
     strEndPoint = "/wp-json/wc/v3/products/tags"
-    strURL = strBaseURL + strEndPoint
+    strURL = CreateURL(strBaseURL,strEndPoint,{})
 
     # Create the payload with the Tag name
     dictPayload = {
@@ -725,7 +757,7 @@ def UpdateWooCommerceProduct(dictProduct:dict, iProductID:int, strBaseURL:str, s
     dictHeader = {}
     strMethod = "post"
     strEndPoint = "/wp-json/wc/v3/products/{}".format(iProductID)
-    strURL = strBaseURL + strEndPoint
+    strURL = CreateURL(strBaseURL,strEndPoint,{})
 
     LogEntry("Updating WooCommerce product ID: {}".format(iProductID), 2)
 
@@ -746,14 +778,14 @@ def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
   dictReturn = {}
   strMethod = "get"
   strEndPoint = "/wp-json/wc/v3/taxes"
-  strURL = strBaseURL + strEndPoint
+  strURL = CreateURL(strBaseURL,strEndPoint,{})
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
     return dictReturn
   dictReturn["Taxes"] = dictResponse[1]
   strEndPoint = "/wp-json/wc/v3/settings/general"
-  strURL = strBaseURL + strEndPoint
+  strURL = CreateURL(strBaseURL,strEndPoint,{})
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
@@ -770,7 +802,7 @@ def LoadTaxDetails(strBaseURL:str, strWCKey:str, strWCSecret:str)->tuple:
       dictReturn["PriceNumDecimals"] = int(dictSetting.get("value"))
 
   strEndPoint = "/wp-json/wc/v3/settings/tax"
-  strURL = strBaseURL + strEndPoint
+  strURL = CreateURL(strBaseURL,strEndPoint,{})
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
@@ -790,7 +822,7 @@ def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:
   dictGeneric = {}
   dictParams = {}
   dictParams["per_page"] = 10 #iPerPage
-  strURL = strBaseURL + strEndPoint
+  strURL = CreateURL(strBaseURL,strEndPoint,{})
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
@@ -806,8 +838,7 @@ def LoadDictionaries(strEndPoint:str, strBaseURL:str, strWCKey:str, strWCSecret:
     while len(dictResponse[1])  > 0:
       LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),2)
       dictParams["page"] = iPage
-      strParams = urlLib.urlencode(dictParams)
-      strURL = strBaseURL + strEndPoint + "?" + strParams
+      strURL = CreateURL(strBaseURL,strEndPoint,dictParams)
       dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
       if dictResponse[0]["Success"]==False:
         LogEntry("API call to WooCommerce endpoint {} failed. {}".format(strEndPoint, dictResponse[1]),0,False)
@@ -970,7 +1001,8 @@ def CleanExit(strCause:str,bLog:bool=True,bNormal:bool=False)->None:
         strScriptName, strScriptHost, strCause), 0)
 
   if strHeartBeatURL:
-    WebResponse = MakeAPICall(strHeartBeatURL+"/"+strLocalExitCode,{},"HEAD",objData=strCause)
+    strURL = CreateURL(strHeartBeatURL,strLocalExitCode,{})
+    WebResponse = MakeAPICall(strURL,{},"HEAD",objData=strCause)
     LogEntry("Heartbeat posted. Response was: {}".format(WebResponse))
 
   if strBSKey and strIncidentURL and not bNormal:
@@ -1174,7 +1206,7 @@ def Convert2OpenMetricGauge(dictPayloads:dict)->list:
 
 def SubmitMetric(dictPayload:dict,strURL:str,strToken:str,strEndPoint:str="metrics")->dict:
   strMethod = "post"
-  strURL = strURL + strEndPoint
+  strURL = CreateURL(strURL,strEndPoint,{})
 
   LogEntry("Submitting metric to server:{}".format(json.dumps(dictPayload)),3)
   dictHeader = {}
@@ -1456,8 +1488,7 @@ def GetProductVariations(iProductId:int, strBaseURL:str,strWCKey:str,strWCSecret
   while iProdCount > 0:
     LogEntry("Fetching variations, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
-    strParams = urlLib.urlencode(dictParams)
-    strURL = strBaseURL + strEndPoint + "?" + strParams
+    strURL = CreateURL(strBaseURL,strEndPoint,dictParams)
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
@@ -1493,8 +1524,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
   while iProdCount > 0:
     LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
     dictParams["page"] = iPage
-    strParams = urlLib.urlencode(dictParams)
-    strURL = strBaseURL + strEndPoint + "?" + strParams
+    strURL = CreateURL(strBaseURL,strEndPoint,dictParams)
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
@@ -1513,8 +1543,7 @@ def MikroTikSync(strBaseURL:str,strWCKey:str,strWCSecret:str,strMTkey:str,strMTU
 
   dictParams = {}
   dictParams["apiKey"]=strMTkey
-  strParams = urlLib.urlencode(dictParams)
-  strURL = strMTURL + "?" + strParams
+  strURL = CreateURL(strMTURL,"",dictParams)
   dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
   if dictResponse[0]["Success"]==False:
     LogEntry("API call to MikroTik Product API failed. {}".format(dictResponse[1]),0,True)
@@ -1654,8 +1683,7 @@ def ConvertCurrency(strBaseCode:str,strCurrencies:str)->dict:
       dictParams[strKeyName] = strCAPIkey
     dictParams[strCurBase] = strBaseCode
     dictParams[strCurrencyList] = strCurrencies
-    strParams = urlLib.urlencode(dictParams)
-    strURL = strCurURL + "?" + strParams
+    strURL = CreateURL(strCurURL,"",dictParams)
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
@@ -1733,8 +1761,7 @@ def FixProducts(strFilter:str,iMaxCharIn:int,strAIsystem:string,objAIClient:any,
   while iProdCount > 0:
     LogEntry("Fetching Products, page {} of {}".format(iPage, iTotalPages),0)
     dictParams["page"] = iPage
-    strParams = urlLib.urlencode(dictParams)
-    strURL = strBaseURL + strEndPoint + "?" + strParams
+    strURL = CreateURL(strBaseURL,strEndPoint,dictParams)
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
@@ -2775,8 +2802,7 @@ def main():
   while iProdCount > 0:
     LogEntry("Fetching products, page {} of {}".format(iPage, iTotalPages),1)
     dictParams["page"] = iPage
-    strParams = urlLib.urlencode(dictParams)
-    strURL = strBaseURL + strEndPoint + "?" + strParams
+    strURL = CreateURL(strBaseURL,strEndPoint,dictParams)
     dictResponse = MakeAPICall(strURL,dictHeader,strMethod,strUser=strWCKey,strPWD=strWCSecret)
     if dictResponse[0]["Success"]==False:
       LogEntry("API call to WooCommerce failed. {}".format(dictResponse[1]),0,True)
