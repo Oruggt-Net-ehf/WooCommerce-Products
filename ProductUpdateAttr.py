@@ -56,7 +56,7 @@ iMinQuiet = 10  # Minimum time in seconds between API calls
 strDefAIenvName = "ANTHROPIC_API_KEY" # Name of the environment variable where the AI key is stored, if using env variable for auth
 strDefAImodel = "claude-sonnet-4-6"
 strDefMetricEndPoint = "metrics" # Endpoint to submit metrics to, appended to the ingestion host
-strDef1PassTokenEnvVar = "1PASSTOKEN" # Name of the environment variable where the 1Password token is stored, if using token for auth
+strDef1PassTokenEnvVar = "VAULT_TOKEN" # Name of the environment variable where the 1Password token is stored, if using token for auth
 iDefMaxToken = 2048 # Max tokens to use for the AI calls, can be adjusted based on needs and model limits
 iDefPerPage = 25 # Number of items to fetch per page for API calls
 
@@ -2194,10 +2194,10 @@ def main():
         strAccountName = objConfig["Generic"]["1PassAccount"]
       else:
         LogEntry("Account name not found in config",1)
-      if "1PassToken" in objConfig["Generic"]:
-        str1PassToken = objConfig["Generic"]["1PassToken"]
+      if "1PassTokenEnvVar" in objConfig["Generic"]:
+        str1PassTokenEnvVar = objConfig["Generic"]["1PassTokenEnvVar"]
       else:
-        str1PassToken = strDef1PassTokenEnvVar
+        str1PassTokenEnvVar = strDef1PassTokenEnvVar
     if "OutDir" in objConfig["Generic"]:
       strDefOutDir = objConfig["Generic"]["OutDir"]
     else:
@@ -2458,7 +2458,8 @@ def main():
   if not strMetricEndpoint:
       strMetricEndpoint = strDefMetricEndPoint
 
-  str1PassToken = FetchEnv(strDef1PassTokenEnvVar)
+  LogEntry("Fetching Token from env variable {}".format(str1PassTokenEnvVar),3)
+  str1PassToken = FetchEnv(str1PassTokenEnvVar)
   if not str1PassToken:
     str1PassToken = None
 
