@@ -1947,6 +1947,7 @@ def main():
 
   objArgs = objParser.parse_args()
   iVerbose = objArgs.verbosity
+  bQuiet = objArgs.silent
 
   ISO = time.strftime("-%Y-%m-%d-%H-%M-%S")
   strVersion = "{0}.{1}.{2}".format(sys.version_info[0], sys.version_info[1], sys.version_info[2])
@@ -1967,19 +1968,20 @@ def main():
 
   if not os.path.exists (strLogDir) :
     os.makedirs(strLogDir)
-    print("\nPath '{0}' for log files didn't exists, so I create it!\n".format(strLogDir))
+    if not bQuiet:
+      print("\nPath '{0}' for log files didn't exists, so I create it!\n".format(strLogDir))
 
   strScriptName = os.path.basename(sys.argv[0])
   iLoc = strScriptName.rfind(".")
 
   strLogFile = strLogDir + strScriptName[:iLoc] + ISO + ".log"
-  print ("Logging to file: {}".format(strLogFile))
+  if not bQuiet:
+    print ("Logging to file: {}".format(strLogFile))
   objLogOut = GetFileHandle(strLogFile, "w")
-  if isinstance(objLogOut, str):
+  if isinstance(objLogOut, str) and not bQuiet:
     print("Unable to open log file {}, error was: {}, aborting".format(strLogFile, objLogOut))
     sys.exit(9)
   strScriptHost = platform.node().upper()
-  bQuiet = objArgs.silent
   bProduction = objArgs.production
   bExport = objArgs.export
   bAudit = objArgs.audit
@@ -3064,7 +3066,8 @@ def main():
   del objParser
   del strSentryDSN
   del objAIClient
-  print("Log file {} closed, objects deleted".format(strLogFile))
+  if not bQuiet:
+    print("Log file {} closed, objects deleted".format(strLogFile))
 
 
 
