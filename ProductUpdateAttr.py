@@ -2422,7 +2422,7 @@ def main():
       strAIsystem = objAISystem.read()
       objAISystem.close()
     else:
-      LogEntry("AI system file {} specified but not found, please correct before proceeding.".format(strAttrEqFile),0,True)
+      LogEntry("AI system file {} specified but not found, please correct before proceeding.".format(strAIsystemFile),0,True)
 
   if strAttrEqFile is not None:
     if os.path.isfile(strAttrEqFile):
