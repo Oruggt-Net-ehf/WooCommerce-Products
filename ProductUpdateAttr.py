@@ -114,8 +114,9 @@ def CreateURL(strBaseURL:str, strEndPoint:str, dictParams:dict={})->str:
     if "apisim" in strBaseURL:
       return strBaseURL
 
-    if not strBaseURL.endswith("/"):
+    if not strBaseURL.endswith("/") and not strEndPoint.startswith("/"):
       strBaseURL += "/"
+      LogEntry("Base URL didn't end in / and endpoint didn't start with / so I added / to base URL",2)
     if dictParams:
       strParams = urlLib.urlencode(dictParams)
       return strBaseURL + strEndPoint + "?" + strParams
@@ -2588,8 +2589,7 @@ def main():
   else:
      objAIClient = None
 
-  #dictTest = ConvertCurrency("USD","isk,eur,nkk,sek,dkk")
-  #CleanExit("Debug exit: {}".format(dictTest),True,True)
+  LogEntry("Retrieved creds {}...{}/{}...{}".format(strWCKey[:6],strWCKey[-6:],strWCSecret[:6],strWCSecret[-4:]),5,False)
 
   LogEntry("Now loading various lists from WooCommerce to prepare for product updates.",0)
   dictHeader = {}
